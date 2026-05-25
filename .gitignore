@@ -1,5 +1,7 @@
 .next
 .next/
+.claude/settings.local.json
+.claude/projects/
 node_modules
 node_modules/
 .env
@@ -22,3 +24,5 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+.vercel

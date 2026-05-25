@@ -305,7 +305,7 @@ function newRowId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `r-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export function PortfolioTrackerPanel({ onPickSymbol }: { onPickSymbol?: (symbol: string) => void }) {
+export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbol?: (symbol: string) => void; className?: string }) {
   const [rows, setRows] = useState<StoredPortfolioRow[]>([]);
   const [quotes, setQuotes] = useState<Record<string, PortfolioQuote>>({});
   const [hydrated, setHydrated] = useState(false);
@@ -442,7 +442,7 @@ export function PortfolioTrackerPanel({ onPickSymbol }: { onPickSymbol?: (symbol
   }
 
   return (
-    <Panel>
+    <Panel className={className}>
       <SectionHeader eyebrow="Portfolio tracker" title="Performance and holdings" action={<CircleDollarSign className="size-5 text-emerald-200" />} />
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">

@@ -169,7 +169,7 @@ export function AlertPanel({ selected }: { selected: StockProfile }) {
 
   const testAlert = async () => {
     setTestStatus("Sending test alert...");
-    const message = `${selected.symbol} test alert from SignalForge AI. Enabled rules: ${enabledCount}.`;
+    const message = `${selected.symbol} test alert from Hawkeye. Enabled rules: ${enabledCount}.`;
     const response = await fetch("/api/alerts/discord", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

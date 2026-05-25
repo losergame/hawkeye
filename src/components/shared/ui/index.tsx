@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { AlertTriangle, Brain, CircleDollarSign, ShieldCheck, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -45,7 +45,7 @@ export function SectionHeader({
   return (
     <div className="mb-3 flex items-start justify-between gap-3">
       <div>
-        {eyebrow ? <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200/70">{eyebrow}</p> : null}
+        {eyebrow ? <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#00D084]/70">{eyebrow}</p> : null}
         <h2 className="text-base font-semibold text-white">{title}</h2>
       </div>
       {action}
@@ -90,7 +90,7 @@ export function SignalDot({ stance }: { stance: SignalStance }) {
     <span
       className={cn(
         "size-2.5 rounded-full",
-        stance === "bullish" && "bg-emerald-300 shadow-[0_0_16px_rgba(110,231,183,0.6)]",
+        stance === "bullish" && "bg-emerald-300 shadow-[0_0_16px_rgba(0,208,132,0.6)]",
         stance === "neutral" && "bg-amber-300 shadow-[0_0_16px_rgba(252,211,77,0.45)]",
         stance === "bearish" && "bg-rose-300 shadow-[0_0_16px_rgba(253,164,175,0.5)]"
       )}
@@ -160,14 +160,14 @@ export function MetricTile({
         <span className="text-xs font-medium uppercase tracking-[0.14em]">{label}</span>
         {icon}
       </div>
-      <p className="text-2xl font-semibold text-white">{value}</p>
+      <p className="font-display text-2xl font-semibold text-white">{value}</p>
       {caption ? <div className="mt-2 text-sm text-slate-400">{caption}</div> : null}
     </div>
   );
 }
 
-export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-md bg-white/10", className)} />;
+export function Skeleton({ className, style }: { className?: string; style?: CSSProperties }) {
+  return <div className={cn("animate-pulse rounded-md bg-white/[0.06]", className)} style={style} />;
 }
 
 export function InsightIcon({ type }: { type: "ai" | "money" | "risk" | "alert" }) {

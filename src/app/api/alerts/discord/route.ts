@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { symbol?: string; message?: string };
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   const symbol = body.symbol?.trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "").slice(0, 12) || "MARKET";
-  const message = (body.message ?? `${symbol} alert triggered from SignalForge AI.`).slice(0, MAX_MESSAGE_LENGTH);
+  const message = (body.message ?? `${symbol} alert triggered from Hawkeye.`).slice(0, MAX_MESSAGE_LENGTH);
 
   if (!webhookUrl) {
     return NextResponse.json({

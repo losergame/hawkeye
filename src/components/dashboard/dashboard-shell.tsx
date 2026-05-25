@@ -37,7 +37,8 @@ import { WatchlistPanel } from "@/components/dashboard/watchlist-panel";
 import { MarketActivityGrid, TopMoversTape } from "@/components/market-data/market-activity-grid";
 import { NewsPanel as MarketNewsPanel } from "@/components/market-data/news-panel";
 import { PortfolioTrackerPanel } from "@/components/portfolio/portfolio-tracker-panel";
-import { SignalForgeLogo } from "@/components/shared/ui/signal-forge-logo";
+import { ThemeToggle } from "@/components/shared/theme-toggle";
+import { HawkeyeLogo } from "@/components/shared/ui/hawkeye-logo";
 import {
   ChangePill,
   ConfidenceBars,
@@ -608,7 +609,7 @@ export function DashboardShell() {
               }}
               className="group flex items-center gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60"
             >
-              <SignalForgeLogo compact={headerCompact} />
+              <HawkeyeLogo compact={headerCompact} />
             </Link>
             <div className="hidden h-8 w-px bg-white/10 md:block" />
             <nav className="hidden items-center gap-1 rounded-lg border border-white/10 bg-white/[0.035] p-1 text-xs font-semibold text-slate-400 lg:flex">
@@ -658,6 +659,7 @@ export function DashboardShell() {
               >
                 {dashboardCompact ? "Compact on" : "Compact"}
               </button>
+              <ThemeToggle compact={headerCompact} />
             </div>
           </div>
 
@@ -960,7 +962,7 @@ export function DashboardShell() {
 
         <MarketActivityGrid compactMode={dashboardCompact} />
 
-        <div id="news-section" className={cn("grid scroll-mt-24 items-start [grid-auto-flow:dense] xl:grid-cols-[minmax(0,0.95fr)_minmax(460px,0.75fr)]", dashboardCompact ? "gap-5" : "gap-3")}>
+        <div id="news-section" className={cn("grid scroll-mt-24 items-start [grid-auto-flow:dense] xl:grid-cols-[minmax(0,0.95fr)_minmax(460px,0.75fr)]", dashboardCompact ? "gap-2" : "gap-3")}>
           <Panel tight className="flex min-h-[300px] max-h-[500px] flex-col self-start">
             <SectionHeader eyebrow="Daily market summary" title="AI market brief" action={<InsightIcon type="ai" />} />
             <p className="mb-5 max-w-5xl text-sm leading-6 text-slate-300">{dailyMarketSummary}</p>
@@ -985,8 +987,8 @@ export function DashboardShell() {
           <MarketNewsPanel selected={selected} />
         </div>
 
-        <div id="portfolio-section" className={cn("grid scroll-mt-24 items-start [grid-auto-flow:dense] xl:grid-cols-[minmax(0,1fr)_minmax(540px,0.82fr)]", dashboardCompact ? "gap-2" : "gap-3")}>
-          <PortfolioTrackerPanel onPickSymbol={(symbol) => selectStockAndFocus(findStock(symbol))} />
+        <div id="portfolio-section" className={cn("grid scroll-mt-24 [grid-auto-flow:dense] xl:grid-cols-[minmax(0,1fr)_minmax(540px,0.82fr)]", dashboardCompact ? "gap-2" : "gap-3")}>
+          <PortfolioTrackerPanel className="h-full" onPickSymbol={(symbol) => selectStockAndFocus(findStock(symbol))} />
 
           <div className="grid gap-3 self-start">
             <Panel tight>
@@ -1030,7 +1032,7 @@ export function DashboardShell() {
             <WatchlistPanel stocks={watchlistStocks} selected={selected.symbol} onPick={selectStockAndFocus} onToggle={toggleWatchlist} />
           </div>
 
-          <Panel tight className="flex min-h-[380px] max-h-[460px] flex-col self-start">
+          <Panel tight className="flex min-h-[460px] max-h-[600px] flex-col self-start">
             <SectionHeader eyebrow="Trending" title="Stocks in focus" action={<Star className="size-5 text-amber-200" />} />
             <ScrollBody className="grid gap-2">
               {trendingStocks.map((item) => (

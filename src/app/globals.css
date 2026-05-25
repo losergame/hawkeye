@@ -1,7 +1,132 @@
 @import "tailwindcss";
+@import "@fontsource/space-grotesk/400.css";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
+
+@theme {
+  --font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-brand-bg: #080C14;
+  --color-accent-green: #00D084;
+  --color-accent-red: #FF3B5C;
+  --color-accent-amber: #F59E0B;
+}
 
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;
+  --card: #ffffff;
+  --ring: #a1a1a1;
+  --input: #e5e5e5;
+  --muted: #f5f5f5;
+  --accent: #f5f5f5;
+  --border: #e5e5e5;
+  --radius: 0rem;
+  --chart-1: #737373;
+  --chart-2: #737373;
+  --chart-3: #737373;
+  --chart-4: #737373;
+  --chart-5: #737373;
+  --popover: #ffffff;
+  --primary: #737373;
+  --sidebar: #fafafa;
+  --font-mono: Geist Mono, monospace;
+  --font-sans: Geist Mono, monospace;
+  --secondary: #f5f5f5;
+  --background: #ffffff;
+  --font-serif: Geist Mono, monospace;
+  --foreground: #0a0a0a;
+  --destructive: #e7000b;
+  --shadow-blur: 0px;
+  --shadow-color: hsl(0 0% 0%);
+  --sidebar-ring: #a1a1a1;
+  --shadow-spread: 0px;
+  --shadow-opacity: 0;
+  --sidebar-accent: #f5f5f5;
+  --sidebar-border: #e5e5e5;
+  --card-foreground: #0a0a0a;
+  --shadow-offset-x: 0px;
+  --shadow-offset-y: 1px;
+  --sidebar-primary: #171717;
+  --muted-foreground: #717171;
+  --accent-foreground: #171717;
+  --popover-foreground: #0a0a0a;
+  --primary-foreground: #fafafa;
+  --sidebar-foreground: #0a0a0a;
+  --secondary-foreground: #171717;
+  --destructive-foreground: #f5f5f5;
+  --sidebar-accent-foreground: #171717;
+  --sidebar-primary-foreground: #fafafa;
+}
+
+.dark {
+  --card: #191919;
+  --ring: #737373;
+  --input: #525252;
+  --muted: #262626;
+  --accent: #404040;
+  --border: #383838;
+  --chart-1: #737373;
+  --chart-2: #737373;
+  --chart-3: #737373;
+  --chart-4: #737373;
+  --chart-5: #737373;
+  --popover: #262626;
+  --primary: #737373;
+  --sidebar: #171717;
+  --secondary: #262626;
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --destructive: #ff6467;
+  --sidebar-ring: #525252;
+  --sidebar-accent: #262626;
+  --sidebar-border: #ffffff;
+  --card-foreground: #fafafa;
+  --sidebar-primary: #fafafa;
+  --muted-foreground: #a1a1a1;
+  --accent-foreground: #fafafa;
+  --popover-foreground: #fafafa;
+  --primary-foreground: #fafafa;
+  --sidebar-foreground: #fafafa;
+  --secondary-foreground: #fafafa;
+  --destructive-foreground: #262626;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-primary-foreground: #171717;
+}
+
+@theme inline {
+  --color-card: var(--card);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --color-radius: var(--radius);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-popover: var(--popover);
+  --color-primary: var(--primary);
+  --color-sidebar: var(--sidebar);
+  --color-secondary: var(--secondary);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-destructive: var(--destructive);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-card-foreground: var(--card-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
 }
 
 * {
@@ -17,7 +142,10 @@ html {
     scroll-behavior: auto;
   }
 
-  .animate-fade-in {
+  .animate-fade-in,
+  .animate-modal-in,
+  .animate-price-up,
+  .animate-price-down {
     animation: none;
     opacity: 1;
     transform: none;
@@ -26,7 +154,7 @@ html {
 
 body {
   margin: 0;
-  background: #030712;
+  background: #080C14;
   color: #f8fafc;
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -47,8 +175,8 @@ button {
   z-index: 100;
   padding: 0.5rem 0.85rem;
   border-radius: 0.375rem;
-  border: 1px solid rgba(34, 211, 238, 0.45);
-  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(0, 208, 132, 0.45);
+  background: rgba(8, 12, 20, 0.95);
   color: #ecfeff;
   font-size: 0.875rem;
   font-weight: 600;
@@ -66,11 +194,11 @@ button {
   width: auto;
   overflow: visible;
   outline: none;
-  box-shadow: 0 0 0 2px #030712, 0 0 0 4px rgba(34, 211, 238, 0.75);
+  box-shadow: 0 0 0 2px #080C14, 0 0 0 4px rgba(0, 208, 132, 0.75);
 }
 
 :where(a, button, input, select, textarea, summary):focus-visible {
-  outline: 2px solid rgba(34, 211, 238, 0.75);
+  outline: 2px solid rgba(0, 208, 132, 0.75);
   outline-offset: 2px;
 }
 
@@ -81,7 +209,7 @@ button {
 }
 
 ::selection {
-  background: rgba(34, 211, 238, 0.32);
+  background: rgba(0, 208, 132, 0.28);
 }
 
 ::-webkit-scrollbar {
@@ -90,20 +218,28 @@ button {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.22);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(8, 12, 20, 0.6);
 }
 
 .glass {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.065);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(20px);
 }
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* ── Animations ─────────────────────────────────────────── */
 
 .animate-fade-in {
   animation: fade-in 0.35s ease both;
@@ -117,5 +253,46 @@ button {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+.animate-modal-in {
+  animation: modal-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-price-up {
+  animation: price-flash-up 0.85s ease-out forwards;
+}
+
+@keyframes price-flash-up {
+  0% {
+    background-color: rgba(0, 208, 132, 0.32);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-price-down {
+  animation: price-flash-down 0.85s ease-out forwards;
+}
+
+@keyframes price-flash-down {
+  0% {
+    background-color: rgba(255, 59, 92, 0.32);
+  }
+  100% {
+    background-color: transparent;
   }
 }

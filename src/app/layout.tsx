@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 
 import "@/app/globals.css";
+import { ThemeProvider } from "@/components/shared/theme-provider";
 
 export const metadata: Metadata = {
-  title: "SignalForge AI | Stock Analysis Dashboard",
+  title: "Hawkeye | Stock Analysis Dashboard",
   description: "AI-powered stock analysis, recommendations, watchlists, portfolio tracking, and market insights.",
   icons: {
     icon: "/icon.svg",
@@ -16,10 +17,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body suppressHydrationWarning>
-        <a href="#main-content" className="skip-link">
-          Skip to main content
-        </a>
-        {children}
+        <ThemeProvider>
+          <a href="#main-content" className="skip-link">
+            Skip to main content
+          </a>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

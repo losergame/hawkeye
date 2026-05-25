@@ -1,4 +1,4 @@
-# SignalForge AI Stock Dashboard
+# Hawkeye Stock Dashboard
 
 A modern AI-powered stock analysis and recommendation dashboard built with Next.js, TypeScript, TailwindCSS, Prisma, Supabase-ready schema, Recharts, and API examples for OpenAI plus market-data providers.
 

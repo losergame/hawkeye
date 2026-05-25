@@ -8,7 +8,7 @@ export async function generateMetadata({ params }: { params: Promise<{ symbol: s
   const stock = findStock(symbol);
 
   return {
-    title: `${stock.symbol} Analysis | SignalForge AI`,
+    title: `${stock.symbol} Analysis | Hawkeye`,
     description: `${stock.name} AI recommendation, technicals, news, and risk score.`
   };
 }
