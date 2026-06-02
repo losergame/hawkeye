@@ -62,39 +62,39 @@ export function QuoteContextPanel({ stock, sessionData }: { stock: StockProfile;
   ];
 
   return (
-    <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.025] p-3">
+    <div className="mt-3 rounded-lg border border-border bg-surface-1 p-3">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Market context</p>
-          <p className="mt-1 text-xs text-slate-500">Live quote checkpoints from the current session and technical overlays.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Market context</p>
+          <p className="mt-1 text-xs text-muted-foreground">Live quote checkpoints from the current session and technical overlays.</p>
         </div>
-        <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs font-semibold text-slate-300">
+        <span className="rounded-full border border-border bg-surface-1 px-3 py-1 text-xs font-semibold text-muted-foreground">
           Price is {rangeLabel}
         </span>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {items.map((item) => (
-          <div key={item.label} className="rounded-lg border border-white/10 bg-slate-950/20 p-3">
+          <div key={item.label} className="rounded-lg border border-border bg-surface-1 p-3">
             <div className="mb-2 flex items-center justify-between gap-3">
-              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{item.label}</span>
+              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{item.label}</span>
               {item.icon}
             </div>
             <p className={cn("text-lg font-semibold", item.tone)}>{item.value}</p>
-            <p className="mt-1 text-xs leading-5 text-slate-400">{item.caption}</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.caption}</p>
           </div>
         ))}
       </div>
 
-      <div className="mt-3 rounded-lg border border-white/10 bg-slate-950/20 p-3">
-        <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
+      <div className="mt-3 rounded-lg border border-border bg-surface-1 p-3">
+        <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
           <span>Range position</span>
           <span>{rangePosition.toFixed(0)}%</span>
         </div>
-        <div className="h-2 rounded-full bg-white/10">
+        <div className="h-2 rounded-full bg-border">
           <div className="h-full rounded-full bg-gradient-to-r from-rose-300 via-amber-300 to-emerald-300" style={{ width: `${rangePosition}%` }} />
         </div>
-        <div className="mt-3 grid gap-2 text-xs text-slate-400 sm:grid-cols-3">
+        <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
           <span>Support {money.format(sessionLow)}</span>
           <span className="sm:text-center">VWAP {money.format(vwap)}</span>
           <span className="sm:text-right">Resistance {money.format(sessionHigh)}</span>

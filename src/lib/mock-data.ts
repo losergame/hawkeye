@@ -514,12 +514,11 @@ export const heatmap: HeatmapTile[] = [
 ];
 
 export const portfolioHoldings: PortfolioHolding[] = [
-  { symbol: "NVDA", name: "NVIDIA Corp.", shares: 24, averageCost: 104.8, allocation: 28 },
-  { symbol: "MU", name: "Micron Technology Inc.", shares: 3, averageCost: 646.6, allocation: 8 },
-  { symbol: "MSFT", name: "Microsoft Corp.", shares: 9, averageCost: 402.1, allocation: 24 },
-  { symbol: "META", name: "Meta Platforms", shares: 7, averageCost: 471.6, allocation: 18 },
-  { symbol: "AAPL", name: "Apple Inc.", shares: 14, averageCost: 190.2, allocation: 14 },
-  { symbol: "AMD", name: "Advanced Micro Devices", shares: 18, averageCost: 143.5, allocation: 8 }
+  { symbol: "NVDA", name: "NVIDIA Corp.",           shares: 24, averageCost: 104.80, allocation: 32 },
+  { symbol: "AAPL", name: "Apple Inc.",             shares: 14, averageCost: 190.20, allocation: 22 },
+  { symbol: "MSFT", name: "Microsoft Corp.",        shares:  9, averageCost: 402.10, allocation: 28 },
+  { symbol: "TSLA", name: "Tesla Inc.",             shares: 12, averageCost: 185.50, allocation: 10 },
+  { symbol: "AMD",  name: "Advanced Micro Devices", shares: 18, averageCost: 143.50, allocation:  8 },
 ];
 
 export const portfolioPerformance: TimePoint[] = [

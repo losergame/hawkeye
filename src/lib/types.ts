@@ -199,8 +199,14 @@ export interface StockSetup {
   setupType: StockSetupType;
   entryPrice: number;
   stopLoss: number;
+  /** Short method label, e.g. "1.5× ATR", "swing low", "below EMA20" */
+  slMethod?: string;
   takeProfit1: number;
+  /** Short method label, e.g. "nearest resistance", "2:1 RR" */
+  tp1Method?: string;
   takeProfit2: number;
+  /** Short method label, e.g. "1.618 fib ext", "EMA50" */
+  tp2Method?: string;
   riskReward: number;
   confidenceScore: number;
   reason: string;
@@ -208,4 +214,29 @@ export interface StockSetup {
   bullishFactors: string[];
   riskFactors: string[];
   indicators: StockSetupIndicators;
+  /** 14-period ATR value at scan time */
+  atr?: number;
+  /** Volume / 20-day average volume ratio */
+  volRatio?: number;
+  /** Whether this result uses live Finnhub prices or demo/synthetic prices */
+  dataQuality?: "live" | "demo";
+  /** Source of the OHLC candles used for indicator / level calculation */
+  candleSource?: "real" | "delayed" | "mock";
+  /** True when real candles were available but fewer than 200 bars — EMA 200 may be unreliable */
+  insufficientData?: boolean;
+  /** Number of OHLC bars used for indicators */
+  barCount?: number;
+  /** ISO timestamp of when price was last fetched */
+  lastUpdated?: string;
+  /** Composite scanner score 0–100 from scanner-scoring engine */
+  scannerScore?: number;
+  /** Rank within the scored result set (1 = highest) */
+  scannerRank?: number;
+  /** Per-component breakdown of how the score was calculated */
+  scoreBreakdown?: {
+    trend: number; momentum: number; volume: number;
+    relativeStrength: number; riskReward: number; marketRegime: number;
+  };
+  /** Market regime at the time of scanning: "risk-on" | "neutral" | "defensive" | "high-volatility" */
+  marketRegime?: string;
 }

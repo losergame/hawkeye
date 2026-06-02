@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { Star, X } from "lucide-react";
@@ -67,15 +67,15 @@ export function StockDetailModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-white/[0.06] p-4">
+        <div className="flex items-start justify-between gap-4 border-b border-border p-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-display text-2xl font-bold text-white">{setup.ticker}</h2>
+              <h2 className="font-display text-2xl font-bold text-foreground">{setup.ticker}</h2>
               <StatusBadge status={setup.status} />
               <ConfidenceBadge score={setup.confidenceScore} />
               <RiskRewardBadge value={setup.riskReward} />
             </div>
-            <p className="mt-1 text-sm text-slate-400">{setup.companyName} · {setup.setupType}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{setup.companyName} Â· {setup.setupType}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {onAddToWatchlist && (
@@ -85,8 +85,8 @@ export function StockDetailModal({
                 className={cn(
                   "inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition",
                   inWatchlist
-                    ? "border-[#00D084]/30 bg-[#00D084]/15 text-[#00D084]"
-                    : "border-white/[0.06] bg-white/[0.04] text-slate-300 hover:border-[#00D084]/25 hover:text-[#00D084]"
+                    ? "border-positive/30 bg-positive/15 text-positive"
+                    : "border-border bg-surface-1 text-muted-foreground hover:border-positive/25 hover:text-positive"
                 )}
               >
                 <Star className={cn("size-4", inWatchlist && "fill-current")} />
@@ -96,7 +96,7 @@ export function StockDetailModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-white/[0.06] bg-white/[0.06] p-2.5 text-slate-300 transition hover:bg-white/[0.12] hover:text-white"
+              className="rounded-lg border border-border bg-surface-2 p-2.5 text-muted-foreground transition hover:bg-surface-2 hover:text-foreground"
             >
               <X className="size-5" />
             </button>
@@ -111,9 +111,9 @@ export function StockDetailModal({
 
             <div className="grid gap-3">
               <MetricGrid setup={setup} />
-              <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-4">
-                <p className="text-sm font-semibold text-white">Setup explanation</p>
-                <p className="mt-2 text-sm leading-6 text-slate-300">{setup.reason}</p>
+              <div className="rounded-lg border border-border bg-surface-1 p-4">
+                <p className="text-sm font-semibold text-foreground">Setup explanation</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{setup.reason}</p>
               </div>
             </div>
           </div>
@@ -124,7 +124,7 @@ export function StockDetailModal({
             <ListPanel title="Risk factors" items={setup.riskFactors} danger />
           </div>
 
-          <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/[0.055] p-4 text-sm leading-6 text-amber-100/85">
+          <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/[0.055] p-4 text-sm leading-6 text-foreground">
             These trade setups are for educational analysis only and are not financial advice. Always do your own research and manage risk.
           </div>
         </div>
@@ -143,16 +143,16 @@ function ModalChart({ setup }: { setup: StockSetup }) {
   const yMax = Math.max(...allPrices) * 1.003;
 
   return (
-    <div className="rounded-lg border border-white/[0.06] bg-[#060B13] p-4">
+    <div className="rounded-lg border border-border bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#00D084]/70">Price chart</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-positive/70">Price chart</p>
         <div className="flex items-center gap-2 text-xs">
-          <span className="rounded-full border border-white/[0.06] bg-white/[0.04] px-2.5 py-1 text-slate-400">
+          <span className="rounded-full border border-border bg-surface-1 px-2.5 py-1 text-muted-foreground">
             RSI {setup.indicators.rsi}
           </span>
           <span className={cn(
             "rounded-full border px-2.5 py-1",
-            setup.indicators.macd === "Bullish" ? "border-[#00D084]/20 bg-[#00D084]/10 text-[#00D084]/80" :
+            setup.indicators.macd === "Bullish" ? "border-positive/20 bg-positive/10 text-positive/80" :
             setup.indicators.macd === "Bearish" ? "border-rose-300/20 bg-rose-300/10 text-rose-300/80" :
             "border-amber-300/20 bg-amber-300/10 text-amber-300/80"
           )}>
@@ -165,44 +165,44 @@ function ModalChart({ setup }: { setup: StockSetup }) {
           <AreaChart data={data} margin={{ top: 4, right: 48, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#00D084" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="#00D084" stopOpacity={0} />
+                <stop offset="5%" stopColor="var(--positive)" stopOpacity={0.25} />
+                <stop offset="95%" stopColor="var(--positive)" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
             <XAxis dataKey="label" hide />
             <YAxis
               domain={[yMin, yMax]}
               tickFormatter={(v: number) => `$${v.toFixed(0)}`}
-              tick={{ fill: "#64748b", fontSize: 10 }}
+              tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
               width={44}
               axisLine={false}
               tickLine={false}
             />
             <Tooltip
-              contentStyle={{ background: "#0D1520", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, fontSize: 12 }}
-              labelStyle={{ color: "#94a3b8" }}
-              itemStyle={{ color: "#00D084" }}
+              contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+              labelStyle={{ color: "var(--muted-foreground)" }}
+              itemStyle={{ color: "var(--positive)" }}
               formatter={(v) => [money.format(Number(v ?? 0)), "Price"]}
             />
             <Area
               type="monotone"
               dataKey="price"
-              stroke="#00D084"
+              stroke="var(--positive)"
               strokeWidth={2}
               fill={`url(#${gradientId})`}
               dot={false}
-              activeDot={{ r: 4, fill: "#00D084", strokeWidth: 0 }}
+              activeDot={{ r: 4, fill: "var(--positive)", strokeWidth: 0 }}
             />
-            <ReferenceLine y={setup.entryPrice} stroke="#00D084" strokeDasharray="5 4" strokeWidth={1.5} label={{ value: "Entry", position: "right", fill: "#00D084", fontSize: 10 }} />
+            <ReferenceLine y={setup.entryPrice} stroke="var(--positive)" strokeDasharray="5 4" strokeWidth={1.5} label={{ value: "Entry", position: "right", fill: "var(--positive)", fontSize: 10 }} />
             <ReferenceLine y={setup.stopLoss} stroke="#FF3B5C" strokeDasharray="5 4" strokeWidth={1.5} label={{ value: "Stop", position: "right", fill: "#FF3B5C", fontSize: 10 }} />
-            <ReferenceLine y={setup.takeProfit1} stroke="#00D084" strokeDasharray="3 3" strokeWidth={1} label={{ value: "TP1", position: "right", fill: "#00D084", fontSize: 10 }} />
+            <ReferenceLine y={setup.takeProfit1} stroke="var(--positive)" strokeDasharray="3 3" strokeWidth={1} label={{ value: "TP1", position: "right", fill: "var(--positive)", fontSize: 10 }} />
           </AreaChart>
         </ResponsiveContainer>
       ) : (
-        <div className="h-[220px] animate-pulse rounded-lg bg-white/[0.04]" />
+        <div className="h-[220px] animate-pulse rounded-lg bg-surface-1" />
       )}
-      <p className="mt-2 text-center text-[10px] text-slate-600">Synthetic path — API-ready for live data</p>
+      <p className="mt-2 text-center text-[10px] text-muted-foreground">Synthetic path â€” API-ready for live data</p>
     </div>
   );
 }
@@ -223,11 +223,11 @@ function MetricGrid({ setup }: { setup: StockSetup }) {
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
       {metrics.map(({ label, value, highlight, positive, danger }) => (
-        <div key={label} className="rounded-lg border border-white/[0.06] bg-white/[0.04] p-3">
-          <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+        <div key={label} className="rounded-lg border border-border bg-surface-1 p-3">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
           <p className={cn(
             "mt-1 font-display text-sm font-semibold tabular-nums",
-            highlight ? "text-white" : positive ? "text-[#00D084]" : danger ? "text-rose-300" : "text-slate-200"
+            highlight ? "text-foreground" : positive ? "text-positive" : danger ? "text-destructive" : "text-muted-foreground"
           )}>
             {value}
           </p>
@@ -239,14 +239,14 @@ function MetricGrid({ setup }: { setup: StockSetup }) {
 
 function ListPanel({ title, items, positive = false, danger = false }: { title: string; items: string[]; positive?: boolean; danger?: boolean }) {
   return (
-    <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] p-4">
-      <p className="text-sm font-semibold text-white">{title}</p>
-      <ul className="mt-3 space-y-2 text-sm text-slate-300">
+    <div className="rounded-lg border border-border bg-surface-1 p-4">
+      <p className="text-sm font-semibold text-foreground">{title}</p>
+      <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
         {items.map((item) => (
           <li key={item} className="flex gap-2">
             <span className={cn(
               "mt-1.5 size-2 shrink-0 rounded-full",
-              positive ? "bg-[#00D084]" : danger ? "bg-[#FF3B5C]" : "bg-[#00D084]"
+              positive ? "bg-positive" : danger ? "bg-destructive" : "bg-positive"
             )} />
             <span>{item}</span>
           </li>
@@ -255,3 +255,4 @@ function ListPanel({ title, items, positive = false, danger = false }: { title: 
     </div>
   );
 }
+

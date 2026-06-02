@@ -56,20 +56,7 @@ function defaultAlertRules(symbol: string, nextEarningsDate: string): AlertRule[
 }
 
 const AUTO_DISCORD_KEY = "signalforge-discord-auto-buy-alerts-v1";
-const AUTO_DISCORD_SENT_KEY = "signalforge-discord-buy-alerts-sent-v1";
 
-function todayKey() {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-}
-
-function buildBuyAlertMessage(selected: StockProfile) {
-  const snapshot = selected.technicalSnapshot;
-  const technicalLine = snapshot
-    ? `Price ${snapshot.price >= snapshot.vwap ? "above" : "below"} VWAP (${snapshot.vwap.toFixed(2)}), relative volume ${snapshot.relativeVolume.toFixed(2)}x, support ${snapshot.support.toFixed(2)}, resistance ${snapshot.resistance.toFixed(2)}.`
-    : selected.shortTermTrend;
-
-  return `BUY alert for ${selected.symbol}: ${selected.bullishConfidence}% bullish confidence, risk ${selected.riskScore}/10. ${selected.whyThisStock} ${technicalLine}`;
-}
 
 function AlertMetric({
   icon,
@@ -98,7 +85,6 @@ export function AlertPanel({ selected }: { selected: StockProfile }) {
   const [rules, setRules] = useState<AlertRule[]>(() => defaultAlertRules(selected.symbol, selected.nextEarningsDate));
   const [testStatus, setTestStatus] = useState<string | null>(null);
   const [autoDiscord, setAutoDiscord] = useState(true);
-  const [autoStatus, setAutoStatus] = useState<string | null>(null);
   const enabledCount = rules.filter((rule) => rule.enabled).length;
   const buyAlertRuleOn = useMemo(() => rules.some((rule) => rule.id === "bullish_momentum" && rule.enabled), [rules]);
 
@@ -117,51 +103,8 @@ export function AlertPanel({ selected }: { selected: StockProfile }) {
     setRules(defaultAlertRules(selected.symbol, selected.nextEarningsDate));
   }, [selected.symbol, selected.nextEarningsDate]);
 
-  useEffect(() => {
-    if (!autoDiscord || selected.recommendation !== "Buy") {
-      return;
-    }
-
-    const alertKey = `${selected.symbol}-${todayKey()}`;
-    const sentMap = JSON.parse(window.localStorage.getItem(AUTO_DISCORD_SENT_KEY) || "{}") as Record<string, string>;
-
-    if (sentMap[alertKey]) {
-      setAutoStatus(`Buy alert already sent today for ${selected.symbol}.`);
-      return;
-    }
-
-    const controller = new AbortController();
-    const sendAutoAlert = async () => {
-      setAutoStatus(`Sending Discord buy alert for ${selected.symbol}...`);
-      try {
-        const response = await fetch("/api/alerts/discord", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ symbol: selected.symbol, message: buildBuyAlertMessage(selected) }),
-          signal: controller.signal
-        });
-
-        if (!response.ok) throw new Error("Discord alert failed");
-
-        const nextSentMap = {
-          ...sentMap,
-          [alertKey]: new Date().toISOString()
-        };
-        window.localStorage.setItem(AUTO_DISCORD_SENT_KEY, JSON.stringify(nextSentMap));
-        setAutoStatus(`Discord buy alert sent for ${selected.symbol}.`);
-      } catch {
-        if (!controller.signal.aborted) {
-          setAutoStatus("Discord auto alert could not be sent. Check the webhook route.");
-        }
-      }
-    };
-
-    const id = window.setTimeout(sendAutoAlert, 800);
-    return () => {
-      controller.abort();
-      window.clearTimeout(id);
-    };
-  }, [autoDiscord, selected]);
+  // Auto BUY alerts disabled — Discord now only fires for Paper Trader events.
+  // (buy, sell, TP hit, SL hit, manual close via /api/paper/run)
 
   const toggleRule = (id: AlertRule["id"]) => {
     setRules((current) => current.map((rule) => (rule.id === id ? { ...rule, enabled: !rule.enabled } : rule)));
@@ -215,7 +158,7 @@ export function AlertPanel({ selected }: { selected: StockProfile }) {
           <span className="rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-xs font-bold">{autoDiscord ? "On" : "Off"}</span>
         </button>
         {testStatus ? <p className="mb-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-300">{testStatus}</p> : null}
-        {autoStatus ? <p className="mb-3 rounded-lg border border-cyan-300/15 bg-cyan-300/[0.05] px-3 py-2 text-xs text-cyan-100">{autoStatus}</p> : null}
+        <p className="mb-3 rounded-lg border border-cyan-300/15 bg-cyan-300/[0.05] px-3 py-2 text-xs text-cyan-100">Discord alerts now fire only for Paper Trader events (buy, sell, TP, SL).</p>
         <div className="grid gap-2">
           {rules.map((rule) => (
             <button

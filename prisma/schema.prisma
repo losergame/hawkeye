@@ -32,6 +32,59 @@ enum TransactionSide {
   SELL
 }
 
+// ── Signal Performance Tracker ────────────────────────────────────────────────
+
+enum SignalStatus {
+  PENDING
+  TRIGGERED
+  TARGET_HIT
+  STOPPED_OUT
+  EXPIRED
+}
+
+model ScannerSignal {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticker          String
+  companyName     String       @map("company_name")
+  setupType       String       @map("setup_type")
+
+  // Entry levels (all Decimal for precision)
+  entryPrice      Decimal      @map("entry_price")      @db.Decimal(18, 4)
+  stopLoss        Decimal      @map("stop_loss")        @db.Decimal(18, 4)
+  takeProfit1     Decimal      @map("take_profit_1")    @db.Decimal(18, 4)
+  takeProfit2     Decimal      @map("take_profit_2")    @db.Decimal(18, 4)
+  riskReward      Decimal      @map("risk_reward")      @db.Decimal(6, 3)
+
+  // Metadata at generation time
+  confidenceScore Int          @map("confidence_score")
+  slMethod        String?      @map("sl_method")
+  tp1Method       String?      @map("tp1_method")
+
+  // Lifecycle
+  status          SignalStatus @default(PENDING)
+  generatedAt     DateTime     @map("generated_at")
+  expiresAt       DateTime     @map("expires_at")
+
+  // Outcome fields (populated as signal progresses)
+  triggeredAt     DateTime?    @map("triggered_at")
+  triggeredPrice  Decimal?     @map("triggered_price") @db.Decimal(18, 4)
+  resolvedAt      DateTime?    @map("resolved_at")
+  resolvedPrice   Decimal?     @map("resolved_price")  @db.Decimal(18, 4)
+  actualReturn    Decimal?     @map("actual_return")   @db.Decimal(10, 4)
+  actualRR        Decimal?     @map("actual_rr")       @db.Decimal(6, 3)
+  isSimulated     Boolean      @default(false)          @map("is_simulated")
+
+  createdAt       DateTime     @default(now())          @map("created_at")
+  updatedAt       DateTime     @updatedAt               @map("updated_at")
+
+  // Dedup: same ticker + setupType within 7 days = same signal
+  @@unique([ticker, setupType, generatedAt])
+  @@index([ticker, status])
+  @@index([status, expiresAt])
+  @@index([generatedAt(sort: Desc)])
+  @@map("scanner_signals")
+}
+
 model User {
   id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email             String             @unique

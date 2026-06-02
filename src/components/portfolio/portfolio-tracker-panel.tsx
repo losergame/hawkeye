@@ -67,16 +67,6 @@ interface PortfolioAnalytics {
   sectorExposure: SectorExposure[];
 }
 
-interface StockApiResponse {
-  provider: "demo" | "finnhub" | "polygon";
-  profile: {
-    symbol: string;
-    name: string;
-    price: number;
-    changePercent: number;
-  };
-}
-
 function normalizeSymbol(symbol: string) {
   const normalized = symbol.trim().toUpperCase();
   return normalized ? findStock(normalized).symbol : "";
@@ -228,12 +218,12 @@ function PortfolioHoldingsTable({
   onPickSymbol?: (symbol: string) => void;
 }) {
   return (
-    <div className="mt-5 overflow-hidden rounded-lg border border-white/10 bg-slate-950/20">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-white/[0.035] px-4 py-3">
+    <div className="mt-5 overflow-hidden rounded-lg border border-border bg-surface-1">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface-1 px-4 py-3">
         <div>
-          <p className="text-sm text-slate-400">Portfolio value</p>
+          <p className="text-sm text-muted-foreground">Portfolio value</p>
           <div className="flex flex-wrap items-end gap-3">
-            <p className="text-2xl font-semibold text-white">{money.format(totals.value)}</p>
+            <p className="text-2xl font-semibold text-foreground">{money.format(totals.value)}</p>
             <p className={cn("pb-1 text-sm font-semibold", totals.gain >= 0 ? "text-emerald-200" : "text-rose-200")}>
               {formatSignedMoney(totals.gain)} ({totals.gainPercent >= 0 ? "+" : ""}
               {totals.gainPercent.toFixed(2)}%)
@@ -244,7 +234,7 @@ function PortfolioHoldingsTable({
       </div>
       <div className="max-h-[340px] overflow-auto">
         <table className="w-full min-w-[920px] text-left text-sm">
-          <thead className="sticky top-0 z-10 bg-[#151a25] text-xs uppercase tracking-[0.14em] text-slate-500 shadow-[0_1px_0_rgba(255,255,255,0.08)]">
+          <thead className="sticky top-0 z-10 bg-card text-xs uppercase tracking-[0.14em] text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.08)]">
             <tr>
               <th className="px-4 py-3">Ticker</th>
               <th className="px-4 py-3">Shares</th>
@@ -256,9 +246,9 @@ function PortfolioHoldingsTable({
               <th className="px-4 py-3">Allocation</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/10">
+          <tbody className="divide-y divide-border">
             {holdings.map((holding) => (
-              <tr key={holding.id} className="text-slate-300 transition hover:bg-white/[0.025]">
+              <tr key={holding.id} className="text-muted-foreground transition hover:bg-surface-1">
                 <td className="px-4 py-3">
                   {onPickSymbol ? (
                     <button
@@ -269,9 +259,9 @@ function PortfolioHoldingsTable({
                       {holding.symbol}
                     </button>
                   ) : (
-                    <span className="font-semibold text-white">{holding.symbol}</span>
+                    <span className="font-semibold text-foreground">{holding.symbol}</span>
                   )}
-                  <p className="mt-0.5 max-w-[180px] truncate text-xs text-slate-500">{holding.name}</p>
+                  <p className="mt-0.5 max-w-[180px] truncate text-xs text-muted-foreground">{holding.name}</p>
                 </td>
                 <td className="px-4 py-3">{number.format(holding.shares)}</td>
                 <td className="px-4 py-3">{money.format(holding.averageCost)}</td>
@@ -283,7 +273,7 @@ function PortfolioHoldingsTable({
                   </p>
                 </td>
                 <td className="px-4 py-3">{money.format(holding.costBasis)}</td>
-                <td className="px-4 py-3 font-semibold text-white">{money.format(holding.marketValue)}</td>
+                <td className="px-4 py-3 font-semibold text-foreground">{money.format(holding.marketValue)}</td>
                 <td className={cn("px-4 py-3 font-semibold", holding.unrealizedGain >= 0 ? "text-emerald-200" : "text-rose-200")}>
                   {formatSignedMoney(holding.unrealizedGain)}
                   <p className="mt-0.5 text-xs opacity-75">
@@ -341,18 +331,25 @@ export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbo
     try {
       const results = await Promise.allSettled(
         symbols.map(async (symbol) => {
-          const response = await fetch(`/api/stocks/${encodeURIComponent(symbol)}`, { cache: "no-store" });
+          // Lightweight quote endpoint — price only, 10s server cache
+          const response = await fetch(`/api/quote/${encodeURIComponent(symbol)}`, { cache: "no-store" });
           if (!response.ok) throw new Error("Quote failed");
-          const data = (await response.json()) as StockApiResponse;
+          const data = (await response.json()) as {
+            symbol: string;
+            name: string;
+            price: number;
+            changePercent: number;
+            source: "live" | "demo";
+          };
           return {
             symbol,
             quote: {
-              symbol: data.profile.symbol,
-              name: data.profile.name,
-              price: data.profile.price,
-              changePercent: data.profile.changePercent,
-              source: data.provider === "demo" ? "demo" : "live"
-            } satisfies PortfolioQuote
+              symbol: data.symbol,
+              name: data.name,
+              price: data.price,
+              changePercent: data.changePercent,
+              source: data.source,
+            } satisfies PortfolioQuote,
           };
         })
       );
@@ -373,11 +370,22 @@ export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbo
 
   useEffect(() => {
     if (!hydrated) return;
-    void refreshQuotes();
-    const id = window.setInterval(() => {
-      void refreshQuotes();
-    }, 30_000);
 
+    // Check market hours to avoid unnecessary polling
+    const marketParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).formatToParts(new Date());
+    const get = (t: Intl.DateTimeFormatPartTypes) => marketParts.find((p) => p.type === t)?.value ?? "";
+    const weekday = get("weekday");
+    const mins = Number(get("hour")) * 60 + Number(get("minute"));
+    const isTrading =
+      !["Sat", "Sun"].includes(weekday) &&
+      ((mins >= 4 * 60 && mins < 20 * 60)); // 4 AM–8 PM ET (covers pre/market/after)
+
+    void refreshQuotes();
+    if (!isTrading) return; // don't schedule interval when market is completely closed
+
+    const id = window.setInterval(() => void refreshQuotes(), 30_000);
     return () => window.clearInterval(id);
   }, [hydrated, refreshQuotes]);
 
@@ -436,7 +444,7 @@ export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbo
   if (!hydrated) {
     return (
       <Panel>
-        <div className="h-64 animate-pulse rounded-lg bg-white/[0.06]" />
+        <div className="h-64 animate-pulse rounded-lg bg-surface-2" />
       </Panel>
     );
   }
@@ -445,7 +453,7 @@ export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbo
     <Panel className={className}>
       <SectionHeader eyebrow="Portfolio tracker" title="Performance and holdings" action={<CircleDollarSign className="size-5 text-emerald-200" />} />
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
         <p>
           Holdings save in this browser. Value uses the live quote route when available, then demo quotes as fallback.
         </p>
@@ -478,13 +486,13 @@ export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbo
       <PortfolioPerformanceChart data={chartData} />
 
       <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_330px]">
-        <div className="rounded-lg border border-white/10 bg-white/[0.025] p-3">
+        <div className="rounded-lg border border-border bg-surface-1 p-3">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-white">Allocation and sector exposure</p>
-              <p className="mt-1 text-xs text-slate-500">Position weights, concentration, and sector mix based on current market value.</p>
+              <p className="text-sm font-semibold text-foreground">Allocation and sector exposure</p>
+              <p className="mt-1 text-xs text-muted-foreground">Position weights, concentration, and sector mix based on current market value.</p>
             </div>
-            <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs font-semibold text-slate-300">
+            <span className="rounded-full border border-border bg-surface-1 px-3 py-1 text-xs font-semibold text-muted-foreground">
               Risk {analytics.riskScore}/10
             </span>
           </div>
@@ -493,10 +501,10 @@ export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbo
               {holdings.slice(0, 6).map((holding) => (
                 <div key={holding.id}>
                   <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-                    <span className="font-semibold text-slate-300">{holding.symbol}</span>
-                    <span className="text-slate-500">{holding.allocation.toFixed(1)}%</span>
+                    <span className="font-semibold text-muted-foreground">{holding.symbol}</span>
+                    <span className="text-muted-foreground">{holding.allocation.toFixed(1)}%</span>
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-2 overflow-hidden rounded-full bg-border">
                     <div className="h-full rounded-full bg-cyan-300" style={{ width: `${Math.max(3, holding.allocation)}%` }} />
                   </div>
                 </div>
@@ -506,10 +514,10 @@ export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbo
               {analytics.sectorExposure.map((sector) => (
                 <div key={sector.sector}>
                   <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-                    <span className="font-semibold text-slate-300">{sector.sector}</span>
-                    <span className="text-slate-500">{sector.allocation.toFixed(1)}%</span>
+                    <span className="font-semibold text-muted-foreground">{sector.sector}</span>
+                    <span className="text-muted-foreground">{sector.allocation.toFixed(1)}%</span>
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-2 overflow-hidden rounded-full bg-border">
                     <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(3, sector.allocation)}%` }} />
                   </div>
                 </div>
@@ -518,9 +526,9 @@ export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbo
           </div>
         </div>
 
-        <div className="rounded-lg border border-white/10 bg-white/[0.025] p-3">
-          <p className="text-sm font-semibold text-white">AI portfolio summary</p>
-          <p className="mt-2 text-sm leading-6 text-slate-300">
+        <div className="rounded-lg border border-border bg-surface-1 p-3">
+          <p className="text-sm font-semibold text-foreground">AI portfolio summary</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
             {analytics.sectorExposure[0]
               ? `Portfolio is ${analytics.sectorExposure[0].allocation.toFixed(0)}% exposed to ${analytics.sectorExposure[0].sector}. ${analytics.riskScore >= 7 ? "Concentration and beta are elevated, so position sizing matters." : "Risk is balanced enough for a focused watchlist, but concentration should still be monitored."}`
               : "Add holdings to generate a portfolio read."}
@@ -542,18 +550,18 @@ export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbo
         </div>
       </div>
 
-      <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.025] p-3">
+      <div className="mt-3 rounded-lg border border-border bg-surface-1 p-3">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-white">Customize positions</p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="text-sm font-semibold text-foreground">Customize positions</p>
+            <p className="mt-1 text-xs text-muted-foreground">
               Edit shares and average cost; the table recalculates market value, cost basis, P/L, and allocation.
             </p>
           </div>
           <button
             type="button"
             onClick={reset}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-white/[0.09] hover:text-white"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-1 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-surface-2 hover:text-white"
           >
             <RotateCcw className="size-3.5" />
             Reset to demo portfolio
@@ -564,19 +572,19 @@ export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbo
           {rows.map((row) => (
             <div
               key={row.id}
-              className="grid gap-2 rounded-lg border border-white/10 bg-slate-950/20 p-2.5 md:grid-cols-[minmax(96px,1fr)_110px_130px_minmax(140px,1.2fr)_40px] md:items-end"
+              className="grid gap-2 rounded-lg border border-border bg-surface-1 p-2.5 md:grid-cols-[minmax(96px,1fr)_110px_130px_minmax(140px,1.2fr)_40px] md:items-end"
             >
-              <label className="grid flex-1 gap-1 text-xs text-slate-500 sm:min-w-[100px]">
+              <label className="grid flex-1 gap-1 text-xs text-muted-foreground sm:min-w-[100px]">
                 Symbol
                 <input
                   value={row.symbol}
                   onChange={(event) => updateRow(row.id, { symbol: event.target.value })}
                   onBlur={(event) => updateRow(row.id, { symbol: normalizeSymbol(event.target.value) })}
-                  className="w-full rounded-md border border-white/10 bg-white/[0.06] px-2 py-1.5 text-sm text-white outline-none focus:border-cyan-300/50"
+                  className="w-full rounded-md border border-border bg-surface-2 px-2 py-1.5 text-sm text-foreground outline-none focus:border-cyan-300/50"
                   maxLength={8}
                 />
               </label>
-              <label className="grid gap-1 text-xs text-slate-500">
+              <label className="grid gap-1 text-xs text-muted-foreground">
                 Shares
                 <input
                   type="number"
@@ -584,10 +592,10 @@ export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbo
                   step="any"
                   value={row.shares}
                   onChange={(event) => updateRow(row.id, { shares: Number(event.target.value) })}
-                  className="w-full rounded-md border border-white/10 bg-white/[0.06] px-2 py-1.5 text-sm text-white outline-none focus:border-cyan-300/50"
+                  className="w-full rounded-md border border-border bg-surface-2 px-2 py-1.5 text-sm text-foreground outline-none focus:border-cyan-300/50"
                 />
               </label>
-              <label className="grid gap-1 text-xs text-slate-500">
+              <label className="grid gap-1 text-xs text-muted-foreground">
                 Avg cost
                 <input
                   type="number"
@@ -595,10 +603,10 @@ export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbo
                   step="0.01"
                   value={row.averageCost}
                   onChange={(event) => updateRow(row.id, { averageCost: Number(event.target.value) })}
-                  className="w-full rounded-md border border-white/10 bg-white/[0.06] px-2 py-1.5 text-sm text-white outline-none focus:border-cyan-300/50"
+                  className="w-full rounded-md border border-border bg-surface-2 px-2 py-1.5 text-sm text-foreground outline-none focus:border-cyan-300/50"
                 />
               </label>
-              <div className="rounded-md border border-white/10 bg-white/[0.035] px-3 py-2 text-xs text-slate-400">
+              <div className="rounded-md border border-border bg-surface-1 px-3 py-2 text-xs text-muted-foreground">
                 {(() => {
                   const symbol = normalizeSymbol(row.symbol);
                   const quote = symbol ? quotes[symbol] ?? fallbackQuote(symbol) : null;
@@ -607,11 +615,11 @@ export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbo
                     <>
                       <div className="flex items-center justify-between gap-3">
                         <span>Last</span>
-                        <span className="font-semibold text-white">{money.format(quote.price)}</span>
+                        <span className="font-semibold text-foreground">{money.format(quote.price)}</span>
                       </div>
                       <div className="mt-1 flex items-center justify-between gap-3">
                         <span>Value</span>
-                        <span className="font-semibold text-white">{money.format(value)}</span>
+                        <span className="font-semibold text-foreground">{money.format(value)}</span>
                       </div>
                     </>
                   ) : (
@@ -633,34 +641,34 @@ export function PortfolioTrackerPanel({ onPickSymbol, className }: { onPickSymbo
           ))}
         </ScrollBody>
 
-        <form onSubmit={addRow} className="grid gap-2 border-t border-white/10 pt-3 md:grid-cols-[minmax(110px,1fr)_120px_140px_auto] md:items-end">
-          <label className="grid gap-1 text-xs text-slate-500">
+        <form onSubmit={addRow} className="grid gap-2 border-t border-border pt-3 md:grid-cols-[minmax(110px,1fr)_120px_140px_auto] md:items-end">
+          <label className="grid gap-1 text-xs text-muted-foreground">
             Add symbol
             <input
               value={draftSymbol}
               onChange={(event) => setDraftSymbol(event.target.value)}
               placeholder="AMD"
-              className="w-full rounded-md border border-white/10 bg-white/[0.06] px-2 py-1.5 text-sm text-white outline-none focus:border-cyan-300/50"
+              className="w-full rounded-md border border-border bg-surface-2 px-2 py-1.5 text-sm text-foreground outline-none focus:border-cyan-300/50"
               maxLength={8}
             />
           </label>
-          <label className="grid gap-1 text-xs text-slate-500">
+          <label className="grid gap-1 text-xs text-muted-foreground">
             Shares
             <input
               value={draftShares}
               onChange={(event) => setDraftShares(event.target.value)}
               placeholder="10"
-              className="w-full rounded-md border border-white/10 bg-white/[0.06] px-2 py-1.5 text-sm text-white outline-none focus:border-cyan-300/50"
+              className="w-full rounded-md border border-border bg-surface-2 px-2 py-1.5 text-sm text-foreground outline-none focus:border-cyan-300/50"
               inputMode="decimal"
             />
           </label>
-          <label className="grid gap-1 text-xs text-slate-500">
+          <label className="grid gap-1 text-xs text-muted-foreground">
             Avg cost
             <input
               value={draftCost}
               onChange={(event) => setDraftCost(event.target.value)}
               placeholder="120.50"
-              className="w-full rounded-md border border-white/10 bg-white/[0.06] px-2 py-1.5 text-sm text-white outline-none focus:border-cyan-300/50"
+              className="w-full rounded-md border border-border bg-surface-2 px-2 py-1.5 text-sm text-foreground outline-none focus:border-cyan-300/50"
               inputMode="decimal"
             />
           </label>

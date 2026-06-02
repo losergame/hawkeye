@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "agent-tower-plugin": {
+      "source": "BayramAnnakov/agent-tower-plugin",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "10e343475b766138acdd953d845ca61adf607dbc4042436390a843bf8855dc47"
+    },
+    "council-review": {
+      "source": "ngmeyer/council-review",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "896d1189c0771b72b9315bc8bcfbef5908b7a8a04c425ad6fdddcd551703923c"
+    }
+  }
+}
