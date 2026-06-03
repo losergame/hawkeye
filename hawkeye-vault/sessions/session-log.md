@@ -5,6 +5,44 @@
 
 ---
 
+## 2026-06-03 (Session 2) — Realized vs Unrealized P/L Split in Paper Trader UI
+
+### Problem
+"Total P/L" was showing realized + unrealized combined, making it impossible to
+distinguish locked-in gains from mark-to-market paper gains.
+
+### Changes (paper-trading-dashboard.tsx only — no trading logic changed)
+
+**`MetricCard` component:**
+- Added optional `sub2` prop for second sub-line
+- Added `"amber"` tone: amber border, amber label, amber text value
+  Used for unrealized P/L to visually indicate "not locked in yet"
+
+**Computed values added above return:**
+- `realizedPnL` = sum of `closedTrades.profitLoss` (DATA_ERROR excluded)
+- `unrealizedPnL` = sum of `openPositions.unrealizedPnL`
+- `closedClean` = closedTrades filtered by DATA_ERROR exclusion (for win-rate calc)
+
+**Metric cards grid: 7 cols → 6 cols, cards reorganized:**
+| Card | Before | After |
+|---|---|---|
+| Account value | Total + "started with" | Total + "started with · % return" + "Locked in (cash): $X" |
+| Cash | Separate card | Removed (shown in Account Value sub2) |
+| Realized P/L | N/A (new) | Closed trades sum, green/red |
+| Unrealized P/L | N/A (new) | Open positions sum, always amber |
+| Win Rate | `account.winRate` | Computed from `closedClean` directly, sub: "XW · XL · closed only" |
+| Invested | Stayed | Shows % deployed |
+| Total P/L | Combined card | Removed |
+| Total Trades | Separate card | Removed |
+
+**Equity curve header:**
+- Was: "X.XX% total return" 
+- Now: "$X.XX realized" (green/red) + "$X.XX open" (amber)
+
+### Build: ✓ Compiled successfully, zero TS errors
+
+---
+
 ## 2026-06-03 — Pullback Buy Tightening + Account Reset from June 2nd
 
 ### Context

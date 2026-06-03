@@ -30,23 +30,31 @@ const dateLabel = (iso: string) =>
 // ── Metric card ───────────────────────────────────────────────────────────────
 
 function MetricCard({
-  label, value, sub, tone = "neutral", icon,
+  label, value, sub, sub2, tone = "neutral", icon,
 }: {
-  label: string; value: string; sub?: string;
-  tone?: "positive" | "negative" | "neutral"; icon: React.ReactNode;
+  label: string; value: string; sub?: string; sub2?: string;
+  tone?: "positive" | "negative" | "neutral" | "amber"; icon: React.ReactNode;
 }) {
   return (
-    <div className="border border-border bg-surface-1 p-4">
+    <div className={cn(
+      "border bg-surface-1 p-4",
+      tone === "amber" ? "border-amber-400/30" : "border-border",
+    )}>
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className={cn(
+          "text-[10px] font-semibold uppercase tracking-wider",
+          tone === "amber" ? "text-amber-400/80" : "text-muted-foreground",
+        )}>{label}</p>
         {icon}
       </div>
       <p className={cn(
         "text-xl font-bold tabular-nums",
         tone === "positive" ? "text-positive" :
-        tone === "negative" ? "text-destructive" : "text-foreground",
+        tone === "negative" ? "text-destructive" :
+        tone === "amber"    ? "text-amber-400"  : "text-foreground",
       )}>{value}</p>
-      {sub && <p className="mt-0.5 text-[11px] text-muted-foreground">{sub}</p>}
+      {sub  && <p className="mt-0.5 text-[11px] text-muted-foreground">{sub}</p>}
+      {sub2 && <p className="mt-0.5 text-[11px] text-muted-foreground">{sub2}</p>}
     </div>
   );
 }
@@ -90,6 +98,20 @@ export function PaperTradingDashboard() {
     void reset(bal);
     setShowResetConfirm(false);
   }
+
+  // ── P/L split: realized vs unrealized ───────────────────────────────────────
+  // Realized = sum of closed trade profitLoss (excludes DATA_ERROR)
+  const realizedPnL = closedTrades
+    .filter((t) => t.dataQuality !== "DATA_ERROR" && t.result !== "DATA_ERROR")
+    .reduce((sum, t) => sum + t.profitLoss, 0);
+
+  // Unrealized = sum of open position mark-to-market P&L
+  const unrealizedPnL = openPositions.reduce((sum, p) => sum + p.unrealizedPnL, 0);
+
+  // Closed trades for win-rate label (DATA_ERROR excluded)
+  const closedClean = closedTrades.filter(
+    (t) => t.dataQuality !== "DATA_ERROR" && t.result !== "DATA_ERROR",
+  );
 
   // Build equity chart data — seed with starting balance if empty
   const chartData = equityCurve.length > 0
@@ -322,50 +344,62 @@ export function PaperTradingDashboard() {
         ) : (
           <>
             {/* ── Metric cards ── */}
-            <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+            <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              {/* Account value — 2 cols, shows total (unrealized included) + locked-in cash */}
               <div className="sm:col-span-2 xl:col-span-2">
                 <MetricCard
                   label="Account value"
                   value={money.format(account.totalAccountValue)}
-                  sub={`Started with ${money.format(account.startingBalance)}`}
+                  sub={`Started with ${money.format(account.startingBalance)} · ${spct(account.totalPnLPercent)} return`}
+                  sub2={`Locked in (cash): ${money.format(account.cashBalance)}`}
                   icon={<BarChart2 className="size-4 text-muted-foreground" />}
                 />
               </div>
+
+              {/* Realized P/L — closed trades only, green/red */}
               <MetricCard
-                label="Cash"
-                value={money.format(account.cashBalance)}
-                sub={`${((account.cashBalance / account.totalAccountValue) * 100).toFixed(0)}% available`}
-                icon={<Activity className="size-4 text-muted-foreground" />}
-              />
-              <MetricCard
-                label="Invested"
-                value={money.format(account.equityValue)}
-                sub={`${openPositions.length} open position${openPositions.length !== 1 ? "s" : ""}`}
-                icon={<TrendingUp className="size-4 text-muted-foreground" />}
-              />
-              <MetricCard
-                label="Total P/L"
-                value={signed(account.totalPnL)}
-                sub={spct(account.totalPnLPercent)}
-                tone={account.totalPnL >= 0 ? "positive" : "negative"}
-                icon={account.totalPnL >= 0
+                label="Realized P/L"
+                value={signed(realizedPnL)}
+                sub={`from ${closedClean.length} closed trade${closedClean.length !== 1 ? "s" : ""}`}
+                tone={realizedPnL > 0 ? "positive" : realizedPnL < 0 ? "negative" : "neutral"}
+                icon={realizedPnL >= 0
                   ? <ArrowUpRight className="size-4 text-positive" />
                   : <ArrowDownRight className="size-4 text-destructive" />}
               />
+
+              {/* Unrealized P/L — open positions, always amber (not locked in) */}
+              <MetricCard
+                label="Unrealized P/L"
+                value={unrealizedPnL !== 0 ? signed(unrealizedPnL) : "$0.00"}
+                sub={`${openPositions.length} open position${openPositions.length !== 1 ? "s" : ""}`}
+                tone="amber"
+                icon={<TrendingUp className="size-4 text-amber-400" />}
+              />
+
+              {/* Win rate — closed trades only */}
               <MetricCard
                 label="Win rate"
-                value={account.totalTrades > 0 ? `${(account.winRate * 100).toFixed(0)}%` : "—"}
-                sub={`${account.wins}W · ${account.losses}L`}
-                tone={account.winRate >= 0.55 ? "positive" : account.winRate >= 0.45 ? "neutral" : "negative"}
-                icon={account.winRate >= 0.5
+                value={closedClean.length > 0
+                  ? `${(closedClean.filter(t => t.result === "win").length / closedClean.length * 100).toFixed(0)}%`
+                  : "—"}
+                sub={`${closedClean.filter(t => t.result === "win").length}W · ${closedClean.filter(t => t.result === "loss").length}L · closed only`}
+                tone={
+                  closedClean.length === 0 ? "neutral" :
+                  (closedClean.filter(t => t.result === "win").length / closedClean.length) >= 0.55 ? "positive" :
+                  (closedClean.filter(t => t.result === "win").length / closedClean.length) >= 0.45 ? "neutral" : "negative"
+                }
+                icon={(closedClean.length === 0 ||
+                       closedClean.filter(t => t.result === "win").length / closedClean.length >= 0.5)
                   ? <CheckCircle className="size-4 text-positive" />
                   : <XCircle className="size-4 text-destructive" />}
               />
+
+              {/* Invested — capital currently at risk */}
               <MetricCard
-                label="Total trades"
-                value={account.totalTrades.toString()}
-                sub="closed"
-                icon={<BarChart2 className="size-4 text-muted-foreground" />}
+                label="Invested"
+                value={money.format(account.equityValue)}
+                sub={`${openPositions.length} position${openPositions.length !== 1 ? "s" : ""} · ${account.cashBalance > 0 ? ((account.equityValue / account.totalAccountValue) * 100).toFixed(0) : 0}% deployed`}
+                icon={<Activity className="size-4 text-muted-foreground" />}
               />
             </div>
 
@@ -373,12 +407,17 @@ export function PaperTradingDashboard() {
             <div className="mb-6 border border-border bg-card p-4">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Account equity curve</p>
-                <span className={cn(
-                  "text-[10px] font-bold tabular-nums",
-                  account.totalPnL >= 0 ? "text-positive" : "text-destructive"
-                )}>
-                  {spct(account.totalPnLPercent)} total return
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className={cn(
+                    "text-[10px] font-semibold tabular-nums",
+                    realizedPnL >= 0 ? "text-positive" : "text-destructive",
+                  )}>
+                    {signed(realizedPnL)} realized
+                  </span>
+                  <span className="text-[10px] font-semibold tabular-nums text-amber-400">
+                    {unrealizedPnL !== 0 ? signed(unrealizedPnL) : "$0.00"} open
+                  </span>
+                </div>
               </div>
               <ResponsiveContainer width="100%" height={160}>
                 <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
