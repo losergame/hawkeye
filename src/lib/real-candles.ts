@@ -20,6 +20,18 @@ import { MIN_BARS_SUFFICIENT, MIN_BARS_FETCH, FETCH_DAYS } from "@/lib/candle-co
 
 export { MIN_BARS_SUFFICIENT, MIN_BARS_FETCH, FETCH_DAYS };
 
+// ── Ensure candle-cache directory exists on module load (server-side only) ────
+// This runs once when the Next.js server process starts, creating the directory
+// before any disk reads/writes so the first prefetch succeeds immediately.
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs   = require("fs")   as typeof import("fs");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require("path") as typeof import("path");
+  const dir  = path.join(process.cwd(), "candle-cache");
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+} catch { /* non-fatal — browser bundle won't reach this */ }
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type CandleSource  = "finnhub" | "polygon" | "synthetic";
@@ -52,10 +64,17 @@ export interface CandleCoverage {
 // In browser context the try/catch makes all disk ops silent no-ops.
 
 interface DiskEntry {
-  bars:      OHLCBar[];
+  // Core candle data
+  ticker:    string;
+  candles:   OHLCBar[];   // user-facing field name; "bars" kept for back-compat read
+  bars?:     OHLCBar[];   // legacy field — read-only for old files, prefer "candles"
+  barCount:  number;
+  fetchedAt: string;      // ISO timestamp of when this fetch happened
   source:    CandleSource;
   quality:   CandleQuality;
-  expiresAt: number;
+  sufficient:boolean;
+  // Expiry
+  expiresAt: number;      // Unix ms
 }
 
 function getCacheDir(): string | null {
@@ -76,11 +95,16 @@ function diskRead(ticker: string): CandleResult | null {
     const file = path.join(dir, `${ticker}.json`);
     if (!fs.existsSync(file)) return null;
     const entry = JSON.parse(fs.readFileSync(file, "utf-8")) as DiskEntry;
+    // Support both new format (candles) and old format (bars) for backward compat
+    const bars = entry.candles ?? entry.bars ?? [];
+    // Stale by age
     if (Date.now() > entry.expiresAt) return null;
+    // Stale by bar count — force re-fetch when threshold was raised
+    if (bars.length < MIN_BARS_SUFFICIENT && entry.source !== "synthetic") return null;
     return {
-      bars: entry.bars, source: entry.source, quality: entry.quality,
-      ticker, barCount: entry.bars.length,
-      sufficient: entry.bars.length >= MIN_BARS_SUFFICIENT,
+      bars, source: entry.source, quality: entry.quality,
+      ticker, barCount: bars.length,
+      sufficient: bars.length >= MIN_BARS_SUFFICIENT,
     };
   } catch { return null; }
 }
@@ -94,19 +118,24 @@ function diskWrite(ticker: string, result: CandleResult, ttl: number): void {
     const dir  = path.join(process.cwd(), "candle-cache");
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const entry: DiskEntry = {
-      bars:      result.bars,
+      ticker,
+      candles:   result.bars,
+      barCount:  result.bars.length,
+      fetchedAt: new Date().toISOString(),
       source:    result.source,
       quality:   result.quality,
+      sufficient:result.bars.length >= MIN_BARS_SUFFICIENT,
       expiresAt: Date.now() + ttl,
     };
     fs.writeFileSync(path.join(dir, `${ticker}.json`), JSON.stringify(entry));
   } catch { /* non-fatal */ }
 }
 
-// ── In-memory cache (hot path) ────────────────────────────────────────────────
+// ── Cache TTLs ────────────────────────────────────────────────────────────────
 
-const REAL_TTL = 4 * 60 * 60_000;
-const FAIL_TTL = 5 * 60_000;
+const DISK_TTL = 24 * 60 * 60_000; // 24 hours — daily bars don't change intraday
+const REAL_TTL =  4 * 60 * 60_000; // 4 hours  — memory hot-cache
+const FAIL_TTL =  5 * 60_000;      // 5 minutes — retry failures quickly
 
 const _mem = new Map<string, { result: CandleResult; expiresAt: number }>();
 
@@ -130,7 +159,9 @@ function cacheGet(ticker: string): CandleResult | null {
 
 function cacheSet(ticker: string, result: CandleResult, ttl: number): void {
   memSet(ticker, result, ttl);
-  if (result.source !== "synthetic") diskWrite(ticker, result, ttl);
+  // Disk uses a longer TTL (24h) — daily bars don't change intraday and survive server restarts.
+  // Synthetic / failure markers are not written to disk (they'll be retried on next restart).
+  if (result.source !== "synthetic") diskWrite(ticker, result, DISK_TTL);
 }
 
 // ── Finnhub ───────────────────────────────────────────────────────────────────
@@ -290,6 +321,25 @@ export async function prefetchTickers(
   }
 
   return { attempted: todo.length, real, sufficient, failed };
+}
+
+/**
+ * Invalidate all in-memory cache entries where barCount < MIN_BARS_SUFFICIENT.
+ * Entries fetched with an old FETCH_DAYS value (e.g., 252 calendar days → 173
+ * trading days) will be cleared so the next prefetch re-fetches them with the
+ * new FETCH_DAYS (290 calendar days → ~200 trading days).
+ *
+ * Returns how many entries were cleared.
+ */
+export function invalidateInsufficientCaches(): number {
+  let cleared = 0;
+  for (const [ticker, entry] of _mem.entries()) {
+    if (entry.result.barCount < MIN_BARS_SUFFICIENT && entry.result.source !== "synthetic") {
+      _mem.delete(ticker);
+      cleared++;
+    }
+  }
+  return cleared;
 }
 
 export function invalidateCandle(ticker: string): void {

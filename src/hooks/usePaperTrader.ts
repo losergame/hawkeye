@@ -197,7 +197,9 @@ export function usePaperTrader(): UsePaperTraderReturn {
       const tickers = [...new Set(positions.map((p) => p.ticker))];
       const entries = await Promise.allSettled(
         tickers.map(async (ticker) => {
-          const d = await apiFetch<{ price: number }>(`/api/quote/${encodeURIComponent(ticker)}`);
+          // force=1 bypasses the 10s server-side quote cache so held positions
+          // always get a genuinely fresh price for TP/SL evaluation.
+          const d = await apiFetch<{ price: number }>(`/api/quote/${encodeURIComponent(ticker)}?force=1`);
           return { ticker, price: d.price };
         }),
       );
@@ -294,7 +296,8 @@ export function usePaperTrader(): UsePaperTraderReturn {
 
     const entries = await Promise.allSettled(
       tickers.map(async (ticker) => {
-        const d = await apiFetch<{ price: number }>(`/api/quote/${encodeURIComponent(ticker)}`);
+        // force=1 — held positions always get fresh quotes (bypasses 10s server cache)
+        const d = await apiFetch<{ price: number }>(`/api/quote/${encodeURIComponent(ticker)}?force=1`);
         return { ticker, price: d.price };
       }),
     );

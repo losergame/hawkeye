@@ -237,6 +237,28 @@ function emaStop(emaVal: number): number {
   return r2(emaVal * 0.99);
 }
 
+/**
+ * Enforce a minimum stop distance so no setup can produce a stop that is
+ * tighter than market noise.
+ *
+ * Rules (applied as a floor — stop can only move FURTHER from entry):
+ *   1. At least 1× ATR below entry   (catches low-volatility stocks where
+ *      1.5× ATR is computed but ATR itself is tiny)
+ *   2. At least 1% below entry for stocks ≥ $100  (prevents ultra-tight
+ *      EMA-based or swing-based stops on high-priced names like CAH/NVDA)
+ *   3. At least 0.5% below entry for stocks < $100
+ *
+ * CAH example that triggered this fix:
+ *   entry $196.13, emaStop → $195.62 (0.26% away) — immediate stop-out.
+ *   With this rule: min distance = max(1×ATR, 1%) → stop pushed to ≥$194.17.
+ */
+function enforceMinStop(entry: number, sl: number, atrVal: number): number {
+  const minPct  = entry >= 100 ? 0.01 : 0.005;   // 1% ≥$100, 0.5% <$100
+  const minDist = Math.max(atrVal, entry * minPct);
+  const floor   = entry - minDist;                 // furthest-allowed stop price
+  return r2(Math.min(sl, floor));                  // push stop down if too tight
+}
+
 /** Fibonacci extension TP: recentLow → recentHigh projected forward.
  *  FIX: guard against zero range (all 40 bars at same price) — fall back to
  *  a percentage-based target so tp2 never collapses to == entry. */
@@ -417,8 +439,8 @@ export function scanTicker(
     volRatio >= 1.15
   ) {
     const entry = r2(currentPrice * 1.003);
-    const sl = atrStop(entry, lastAtr);
-    const risk = entry - sl;
+    const sl    = enforceMinStop(entry, atrStop(entry, lastAtr), lastAtr);
+    const risk  = entry - sl;
     const resist = nearestResistance(pricedBars, entry, 3);
     const tp1 = capTP(resist !== null && resist > entry + risk * 1.5
       ? r2(resist)
@@ -461,7 +483,7 @@ export function scanTicker(
       volRatio: r2(volRatio),
       candleSource: actualSource,
       insufficientData,
-      barCount: barCount || undefined,
+      barCount: barCount > 0 ? barCount : undefined,
     });
   }
 
@@ -479,7 +501,8 @@ export function scanTicker(
   ) {
     const entry = r2(currentPrice * 1.005);
     const refEma = nearEma20 ? lastEma20 : lastEma50;
-    const sl = r2(Math.max(emaStop(refEma), swingStop(pricedBars, entry, lastAtr)));
+    const rawSl = r2(Math.max(emaStop(refEma), swingStop(pricedBars, entry, lastAtr)));
+    const sl    = enforceMinStop(entry, rawSl, lastAtr);
     if (sl < entry) { // FIX: reject when EMA is above entry → inverted setup
       const risk = entry - sl;
       const resist = nearestResistance(pricedBars, entry, 3);
@@ -533,7 +556,7 @@ export function scanTicker(
     // FIX: was swingStop(pricedBars, currentPrice, lastAtr) — anchor mismatch
     // caused sl to be computed relative to currentPrice while risk = entry - sl.
     // A swing low between currentPrice and entry would set sl above entry.
-    const sl = swingStop(pricedBars, entry, lastAtr);
+    const sl   = enforceMinStop(entry, swingStop(pricedBars, entry, lastAtr), lastAtr);
     const risk = entry - sl;
     const tp1 = capTP(lastEma20 > entry
       ? r2(lastEma20)
@@ -578,7 +601,7 @@ export function scanTicker(
       volRatio: r2(volRatio),
       candleSource: actualSource,
       insufficientData,
-      barCount: barCount || undefined,
+      barCount: barCount > 0 ? barCount : undefined,
     });
   }
 
@@ -598,8 +621,8 @@ export function scanTicker(
     macdIncreasing
   ) {
     const entry = r2(currentPrice * 1.002);
-    const sl = emaStop(lastEma20);
-    const risk = entry - sl;
+    const sl    = enforceMinStop(entry, emaStop(lastEma20), lastAtr);
+    const risk  = entry - sl;
     const resist = nearestResistance(pricedBars, entry, 3);
     const tp1 = capTP(resist !== null && resist > entry + risk * 1.6
       ? r2(resist)
@@ -648,7 +671,7 @@ export function scanTicker(
       volRatio: r2(volRatio),
       candleSource: actualSource,
       insufficientData,
-      barCount: barCount || undefined,
+      barCount: barCount > 0 ? barCount : undefined,
     });
   }
 

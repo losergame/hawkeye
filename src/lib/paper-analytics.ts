@@ -1122,6 +1122,7 @@ export interface SanitizationResult {
   trades:            PaperTrade[];
   deadExcluded:      number;
   duplicatesExcluded:number;
+  dataErrorExcluded: number;   // always excluded — bad Finnhub price data
   totalExcluded:     number;
 }
 
@@ -1129,7 +1130,15 @@ export function sanitizeTrades(
   trades:  PaperTrade[],
   options: SanitizationOptions = DEFAULT_SANITIZATION,
 ): SanitizationResult {
-  let clean          = [...trades];
+  // DATA_ERROR trades are ALWAYS excluded — not a user toggle.
+  // These were closed using bad/stale Finnhub price data and must never
+  // pollute win rate, P/L, drawdown, or any other calculation.
+  const beforeDataError = trades.length;
+  let clean = trades.filter(
+    (t) => t.dataQuality !== "DATA_ERROR" && t.result !== "DATA_ERROR",
+  );
+  const dataErrorExcluded = beforeDataError - clean.length;
+
   let deadExcluded   = 0;
   let dupExcluded    = 0;
 
@@ -1150,7 +1159,13 @@ export function sanitizeTrades(
     clean = deduped;
   }
 
-  return { trades: clean, deadExcluded, duplicatesExcluded: dupExcluded, totalExcluded: deadExcluded + dupExcluded };
+  return {
+    trades: clean,
+    deadExcluded,
+    duplicatesExcluded: dupExcluded,
+    dataErrorExcluded,
+    totalExcluded: deadExcluded + dupExcluded + dataErrorExcluded,
+  };
 }
 
 // ── Universe audit helpers ────────────────────────────────────────────────────

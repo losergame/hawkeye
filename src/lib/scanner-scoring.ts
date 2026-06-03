@@ -62,17 +62,23 @@ export function computeMarketRegime(setups: StockSetup[]): MarketRegime {
   const bullish = setups.filter(
     (s) => s.setupType === "Momentum Breakout" || s.setupType === "Trend Continuation",
   ).length;
-  const bearish    = setups.filter((s) => s.setupType === "Oversold Bounce").length;
-  const pullbacks  = setups.filter((s) => s.setupType === "Pullback Buy").length;
+  const bearish   = setups.filter((s) => s.setupType === "Oversold Bounce").length;
+  const pullbacks = setups.filter((s) => s.setupType === "Pullback Buy").length;
   const bullishRatio  = bullish / setups.length;
   const bearishRatio  = bearish / setups.length;
-  // Pullback Buy dominance (>50% of setups) is a weak-market signal —
-  // stocks are broadly retreating, not breaking out.
   const pullbackRatio = pullbacks / setups.length;
 
   if (avgVolRatio > 1.8 && Math.abs(bullishRatio - 0.5) < 0.15) return "high-volatility";
   if (avgRsi > 58 && bullishRatio > 0.48 && avgVolRatio > 1.2)   return "risk-on";
-  if (avgRsi < 42 || bearishRatio > 0.35 || pullbackRatio > 0.55) return "defensive";
+
+  // Defensive: genuine RSI weakness OR Oversold Bounce dominance.
+  // Pullback Buy dominance alone does NOT trigger defensive — normal mid-trend
+  // consolidation produces high pullback ratios without being a true downtrend.
+  // pullbackRatio only contributes when RSI is also soft (< 47), confirming
+  // the pullbacks are happening in a weakening tape, not healthy rotation.
+  if (avgRsi < 42) return "defensive";
+  if (bearishRatio > 0.35) return "defensive";
+  if (pullbackRatio > 0.55 && avgRsi < 47) return "defensive";
   return "neutral";
 }
 
@@ -93,11 +99,19 @@ export const REGIME_TONE: Record<MarketRegime, "positive" | "neutral" | "negativ
 // ── Individual component scorers ──────────────────────────────────────────────
 
 export function calculateTrendScore(setup: StockSetup): number {
-  const { currentPrice, indicators } = setup;
+  const { currentPrice, indicators, setupType } = setup;
   let score = 0;
   if (currentPrice > indicators.ema200) score += 10;
   if (currentPrice > indicators.ema50)  score += 8;
   if (currentPrice > indicators.ema20)  score += 7;
+
+  // Oversold Bounce structural support credit: the setup requires RSI ≤ 36
+  // and elevated volume, which already confirms demand. When price is below all
+  // EMAs (score === 0), grant 5 pts for structural demand signal — the stock
+  // is oversold by definition and has some floor. Without this, Oversold Bounce
+  // can never exceed ~55 pts in defensive and never qualifies at MIN_SCORE = 65.
+  if (score === 0 && setupType === "Oversold Bounce") score = 5;
+
   return Math.min(25, score);
 }
 
@@ -248,11 +262,13 @@ export function getTopFiveSetups(
 ): ScoredSetup[] {
   const derivedRegime = regime ?? computeMarketRegime(setups);
 
+  // High-conviction score threshold — MB/TC in defensive must clear this bar
+  const MIN_SCORE_DEFENSIVE_AGGRESSIVE = 75;
+
   const valid = setups.filter((s) => {
     if (!validateForTopFive(s)) return false;
     if (setupTypeFilter !== "All" && s.setupType !== setupTypeFilter) return false;
-    // In defensive regime, Pullback Buy is blocked from Top 5 entirely —
-    // stocks in pullback mode during a downtrend tend to keep falling.
+    // Pullback Buy is blocked in defensive regardless of score (falling stocks keep falling)
     if (derivedRegime === "defensive" && s.setupType === "Pullback Buy") return false;
     return true;
   });
@@ -273,7 +289,20 @@ export function getTopFiveSetups(
       const adjTotal = Math.round(rawTotal * multiplier);
       return { setup, bd: { ...bd, total: adjTotal }, adjTotal };
     })
-    .filter(({ adjTotal }) => adjTotal >= MIN_SCORE)
+    .filter(({ adjTotal, setup }) => {
+      // MB/TC in defensive: require higher bar (post-penalty score ≥ 75)
+      if (
+        derivedRegime === "defensive" &&
+        (setup.setupType === "Momentum Breakout" || setup.setupType === "Trend Continuation")
+      ) {
+        return adjTotal >= MIN_SCORE_DEFENSIVE_AGGRESSIVE;
+      }
+      // Oversold Bounce in defensive: lowered to 58 (structural scoring disadvantage)
+      if (derivedRegime === "defensive" && setup.setupType === "Oversold Bounce") {
+        return adjTotal >= 58;
+      }
+      return adjTotal >= MIN_SCORE;
+    })
     .sort((a, b) => b.adjTotal - a.adjTotal)
     // One entry per ticker — keep only the highest-scored setup for each stock
     .filter((() => {

@@ -56,8 +56,16 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // ── 2. Cron endpoints: check CRON_SECRET ─────────────────────────────────
-  if (pathname.startsWith("/api/cron/")) {
+  // ── 2. Admin endpoints: check CRON_SECRET ────────────────────────────────
+  // Cron jobs + scanner maintenance ops share the same secret gate.
+  const isAdminPath =
+    pathname.startsWith("/api/cron/") ||
+    pathname === "/api/scanner/prefetch" ||
+    pathname === "/api/scanner/diagnose" ||
+    pathname === "/api/scanner/cache-stats" ||
+    pathname === "/api/paper/trades/mark-error";
+
+  if (isAdminPath) {
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = req.headers.get("authorization");
 

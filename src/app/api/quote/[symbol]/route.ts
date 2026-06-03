@@ -51,7 +51,7 @@ function getMarketStatus(): QuotePayload["marketStatus"] {
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ symbol: string }> }
 ) {
   const { symbol } = await params;
@@ -60,8 +60,12 @@ export async function GET(
     return NextResponse.json({ error: "Invalid symbol" }, { status: 400 });
   }
 
+  // ?force=1 bypasses the in-process cache — used by the price-check loop for
+  // held positions so TP/SL evaluation always uses a fresh quote, not a stale one.
+  const force = new URL(req.url).searchParams.get("force") === "1";
+
   const cached = quoteCache.get(sym);
-  if (cached && cached.expiresAt > Date.now()) {
+  if (!force && cached && cached.expiresAt > Date.now()) {
     return NextResponse.json({ ...cached.data, cache: "hit" });
   }
 
@@ -83,6 +87,21 @@ export async function GET(
       if (!res.ok) throw new Error(`Finnhub ${res.status}`);
       const q = (await res.json()) as FinnhubQuote;
       if (!q.c || q.c <= 0) throw new Error("No quote data");
+
+      // Sanity check: if the new price is >50% different from the cached price,
+      // log a warning. Finnhub free tier occasionally returns stale historical
+      // quotes (e.g., GRMN at $83 when current price is $238). The paper trader
+      // has its own 30% gate — this is a server-side early warning.
+      if (cached) {
+        const delta = Math.abs(q.c - cached.data.price) / cached.data.price;
+        if (delta > 0.50) {
+          console.warn(
+            `[quote/${sym}] SUSPICIOUS PRICE JUMP: ` +
+            `cached $${cached.data.price.toFixed(2)} → Finnhub $${q.c.toFixed(2)} ` +
+            `(${(delta * 100).toFixed(1)}% change). Possible stale data.`
+          );
+        }
+      }
 
       const payload: QuotePayload = {
         symbol: sym,

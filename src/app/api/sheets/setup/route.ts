@@ -25,7 +25,7 @@ export async function POST() {
 
   return NextResponse.json({
     ok: true,
-    message: "All sheets initialised: Signals, SignalPerformance, Portfolio, Watchlist, ScannerHistory, DailyTopPicks, AppSettings",
+    message: "All sheets initialised: Signals, SignalPerformance, Portfolio, PortfolioTrades, Watchlist, ScannerHistory, DailyTopPicks, AppSettings",
     formatting: {
       applied:         fmt.ok,
       rulesApplied:    fmt.rulesApplied,

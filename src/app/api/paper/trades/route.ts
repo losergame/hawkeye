@@ -32,6 +32,7 @@ function rowToTrade(row: string[]): PaperTrade {
     reasonClosed:       o.reasonClosed,
     openedAt:           o.openedAt,
     closedAt:           o.closedAt,
+    dataQuality:        (o.dataQuality as PaperTrade["dataQuality"]) || undefined,
   };
 }
 

@@ -61,7 +61,11 @@ export interface PaperPosition {
   notes?: TradeNotes;
 }
 
-export type TradeResult = "win" | "loss" | "breakeven";
+export type TradeResult = "win" | "loss" | "breakeven" | "DATA_ERROR";
+
+/** Flagged when a trade was closed using bad/stale price data (e.g. Finnhub glitch).
+ *  DATA_ERROR trades are excluded from all analytics calculations. */
+export type DataQuality = "ok" | "DATA_ERROR";
 
 export type GapType = "adverse" | "favorable" | "none";
 
@@ -91,6 +95,8 @@ export interface PaperTrade {
   tp1AtEntry?: number;
   slAtEntry?:  number;
   notes?: TradeNotes;
+  /** "DATA_ERROR" when closed using bad/stale price data — excluded from analytics. */
+  dataQuality?: DataQuality;
 }
 
 export interface TradeAuditEntry {
@@ -417,6 +423,14 @@ export interface SignalRejection {
   detail?: string;
 }
 
+export interface BadPriceEntry {
+  ticker:   string;
+  badPrice: number;
+  entry:    number;
+  pct:      number; // negative = drop, positive = spike
+  at:       string;
+}
+
 export interface RunCycleResult {
   account:         PaperAccount;
   openPositions:   PaperPosition[];
@@ -427,6 +441,7 @@ export interface RunCycleResult {
   rejections:      SignalRejection[];
   signalsChecked:  number;
   auditLog:        TradeAuditEntry[];
+  badPrices:       BadPriceEntry[];   // prices rejected for being unrealistic
 }
 
 // Gain % threshold above which a trade is flagged as suspicious
@@ -440,10 +455,50 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
   const effectiveMinConf  = presetOverrides?.minConfidence   ?? MIN_CONFIDENCE;
   const effectiveMinRR    = presetOverrides?.minRiskReward   ?? MIN_RR;
   const allowedSetups     = presetOverrides?.allowedSetupTypes ?? [];
-  let account         = { ...input.account };
-  let openPositions   = input.openPositions.map((p) => {
+  let account = { ...input.account };
+
+  // ── Price sanity gate ─────────────────────────────────────────────────────
+  // Finnhub free tier occasionally returns stale historical prices (e.g., GRMN
+  // at $83 when current is $238). Without this guard a single bad tick triggers
+  // an immediate stop-out at an unrealistic exit price.
+  //
+  // Rules — price is REJECTED (keep last known good price) if:
+  //   • price > 30% below entry in a single cycle (impossible in normal markets)
+  //   • price > 200% above entry              (pure safety net)
+  //
+  // Rejected prices are logged to _badPriceLog for diagnostics.
+  const badPriceLog: Array<{ ticker: string; badPrice: number; entry: number; pct: number; at: string }> = [];
+
+  let openPositions = input.openPositions.map((p) => {
     const price = prices[p.ticker];
-    return price ? updatePositionPrice(p, price) : p;
+    if (!price || price <= 0) return p;
+
+    const dropPct   = (p.entryPrice - price) / p.entryPrice;
+    const gainPct   = (price - p.entryPrice) / p.entryPrice;
+    const tooLow    = dropPct > 0.30;   // >30% drop in one 30-second tick = stale data
+    const tooHigh   = gainPct > 2.00;   // >200% gain         = stale data
+
+    if (tooLow || tooHigh) {
+      badPriceLog.push({
+        ticker:   p.ticker,
+        badPrice: price,
+        entry:    p.entryPrice,
+        pct:      tooLow ? -dropPct * 100 : gainPct * 100,
+        at:       new Date().toISOString(),
+      });
+      const pctLabel = tooLow
+        ? `-${(dropPct * 100).toFixed(1)}%`
+        : `+${(gainPct * 100).toFixed(1)}%`;
+      console.warn(
+        `[paper-trading] BAD PRICE REJECTED — ${p.ticker}: ` +
+        `entry $${p.entryPrice.toFixed(2)}, quote $${price.toFixed(2)} ` +
+        `(${pctLabel} in one tick). ` +
+        `Keeping last known price $${p.currentPrice.toFixed(2)}.`
+      );
+      return p; // keep last known good currentPrice, skip update
+    }
+
+    return updatePositionPrice(p, price);
   });
 
   const closedTrades: PaperTrade[]     = [];
@@ -605,9 +660,15 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
       // Regime-based setup type gating
       if (regime === "defensive") {
         if (s.setupType === "Momentum Breakout" || s.setupType === "Trend Continuation") {
-          rejections.push({ ticker: s.ticker, reason: "regime_defensive",
-            detail: `${s.setupType} blocked — market regime is defensive` });
-          continue;
+          // Allow high-conviction signals (score ≥ 75) even in defensive —
+          // a breakout strong enough to score that high has enough momentum
+          // to go against a soft tape. Weaker signals are blocked.
+          const score = s.scannerScore ?? 0;
+          if (score < 75) {
+            rejections.push({ ticker: s.ticker, reason: "regime_defensive",
+              detail: `${s.setupType} blocked in defensive (score ${score} < 75 minimum)` });
+            continue;
+          }
         }
         if (s.setupType === "Pullback Buy") {
           rejections.push({ ticker: s.ticker, reason: "regime_defensive",
@@ -731,5 +792,6 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
   return {
     account, openPositions, newPositions, closedTrades, actions, equityPoint,
     rejections, signalsChecked: signals.length, auditLog,
+    badPrices: badPriceLog,
   };
 }

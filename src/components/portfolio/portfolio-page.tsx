@@ -12,6 +12,8 @@ import {
   ArrowUpRight,
   Check,
   BarChart2,
+  CircleDollarSign,
+  Loader2,
   Pencil,
   Plus,
   RefreshCw,
@@ -63,6 +65,17 @@ async function sheetsDelete(id: string): Promise<void> {
   }
 }
 
+async function sheetsClosePosition(id: string): Promise<{ trade: { ticker: string; exitPrice: number; profitLoss: number; profitLossPercent: number } }> {
+  const res = await fetch(`/api/portfolio/${encodeURIComponent(id)}/close`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{ trade: { ticker: string; exitPrice: number; profitLoss: number; profitLossPercent: number } }>;
+}
+
 async function sheetsPatch(id: string, patch: Partial<StoredPortfolioRow>): Promise<void> {
   const res = await fetch(`/api/portfolio/${encodeURIComponent(id)}`, {
     method:  "PATCH",
@@ -80,6 +93,8 @@ async function sheetsPatch(id: string, patch: Partial<StoredPortfolioRow>): Prom
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const signed = (v: number) => (v >= 0 ? "+" : "") + money.format(v);
 const signedPct = (v: number) => (v >= 0 ? "+" : "") + v.toFixed(2) + "%";
+const HOLDINGS_GRID_COLUMNS = "64px minmax(160px,1fr) 70px 95px 95px 105px 105px 80px 64px 250px";
+const HOLDINGS_GRID_STYLE = { gridTemplateColumns: HOLDINGS_GRID_COLUMNS, minWidth: "1120px" };
 
 // ── Fallback prices (used before first API fetch) ─────────────────────────────
 
@@ -157,6 +172,7 @@ export function PortfolioPage() {
   const [hydrated, setHydrated]       = useState(false);
   const [quotes, setQuotes]           = useState<Record<string, LiveQuote>>({});
   const [refreshing, setRefreshing]   = useState(false);
+  const [closingId, setClosingId]     = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   // Edit state
@@ -350,6 +366,7 @@ export function PortfolioPage() {
   function cancelEdit() { setEditingId(null); }
 
   function deleteRow(id: string) {
+    if (closingId) return;
     if (editingId === id) setEditingId(null);
     const next = rows.filter((r) => r.id !== id);
     setRows(next); // optimistic
@@ -364,6 +381,38 @@ export function PortfolioPage() {
         const { rows: reverted } = await sheetsLoad().catch(() => ({ rows: rows }));
         setRows(reverted);
       });
+  }
+
+  async function closePosition(id: string) {
+    if (closingId) return;
+    const row = rows.find((r) => r.id === id);
+    if (!row) return;
+
+    const symbol = row.symbol.toUpperCase();
+    const confirmed = window.confirm(
+      `Close ${symbol} using the latest live quote? This saves a completed trade to PortfolioTrades and removes the open holding.`,
+    );
+    if (!confirmed) return;
+
+    if (editingId === id) setEditingId(null);
+    setClosingId(id);
+    try {
+      const { trade } = await sheetsClosePosition(id);
+      const { rows: refreshed, source } = await sheetsLoad();
+      setRows(refreshed);
+      setDebugSource(source);
+      setLastSaveTime(new Date().toISOString());
+      setLastError(null);
+      toast.success(
+        `Closed ${trade.ticker} at ${money.format(trade.exitPrice)} (${signed(trade.profitLoss)}, ${signedPct(trade.profitLossPercent)})`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setLastError(message);
+      toast.error(`Close failed: ${message}`);
+    } finally {
+      setClosingId(null);
+    }
   }
 
   // ── Add position ───────────────────────────────────────────────────────────
@@ -492,7 +541,7 @@ export function PortfolioPage() {
         )}
 
         {/* ── Holdings table ── */}
-        <div className="border border-border bg-card">
+        <div className="overflow-x-auto border border-border bg-card">
           {/* Table header */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div>
@@ -514,7 +563,7 @@ export function PortfolioPage() {
           {/* Column headers */}
           <div
             className="grid border-b border-border bg-surface-1 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
-            style={{ gridTemplateColumns: "64px 1fr 70px 95px 95px 105px 105px 80px 64px 72px" }}
+            style={HOLDINGS_GRID_STYLE}
           >
             <span>Ticker</span>
             <span>Company</span>
@@ -525,7 +574,7 @@ export function PortfolioPage() {
             <span>Gain / loss</span>
             <span>Return</span>
             <span>Alloc.</span>
-            <span />
+            <span className="text-right">Actions</span>
           </div>
 
           {/* Empty state */}
@@ -547,7 +596,7 @@ export function PortfolioPage() {
                   "grid items-center border-b border-border px-4 py-3 text-xs last:border-0 transition",
                   isEditing ? "bg-surface-1" : "hover:bg-surface-1/50",
                 )}
-                style={{ gridTemplateColumns: "64px 1fr 70px 95px 95px 105px 105px 80px 64px 72px" }}
+                style={HOLDINGS_GRID_STYLE}
               >
                 {/* Ticker */}
                 <span className={cn("font-bold text-sm", COLORS[i % COLORS.length])}>{h.ticker}</span>
@@ -614,12 +663,13 @@ export function PortfolioPage() {
                 <span className="tabular-nums text-muted-foreground">{h.allocation.toFixed(1)}%</span>
 
                 {/* Row actions */}
-                <div className="flex items-center justify-end gap-1">
+                <div className="flex items-center justify-end gap-1.5">
                   {isEditing ? (
                     <>
                       <button
                         type="button"
                         onClick={saveEdit}
+                        disabled={closingId !== null}
                         className="p-1.5 text-positive transition hover:bg-positive/10"
                         title="Save"
                       >
@@ -628,6 +678,7 @@ export function PortfolioPage() {
                       <button
                         type="button"
                         onClick={cancelEdit}
+                        disabled={closingId !== null}
                         className="p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                         title="Cancel"
                       >
@@ -639,18 +690,33 @@ export function PortfolioPage() {
                       <button
                         type="button"
                         onClick={() => startEdit(rows.find((r) => r.id === h.id)!)}
-                        className="p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                        disabled={closingId !== null}
+                        className="p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                         title="Edit shares / avg cost"
                       >
                         <Pencil className="size-3.5" />
                       </button>
                       <button
                         type="button"
-                        onClick={() => deleteRow(h.id)}
-                        className="p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-                        title="Remove position"
+                        onClick={() => void closePosition(h.id)}
+                        disabled={closingId !== null}
+                        className="inline-flex h-8 min-w-[112px] items-center justify-center gap-1.5 border border-positive/30 bg-positive/10 px-2 text-[10px] font-semibold uppercase tracking-wider text-positive transition hover:bg-positive/20 disabled:cursor-not-allowed disabled:opacity-50"
+                        title="Close Position"
+                        aria-label={`Close Position ${h.ticker}`}
                       >
-                        <Trash2 className="size-3.5" />
+                        {closingId === h.id ? <Loader2 className="size-3 animate-spin" /> : <CircleDollarSign className="size-3" />}
+                        {closingId === h.id ? "Closing" : "Close Position"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteRow(h.id)}
+                        disabled={closingId !== null}
+                        className="inline-flex h-8 min-w-[126px] items-center justify-center gap-1.5 border border-border px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground transition hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
+                        title="Delete / Remove Entry"
+                        aria-label={`Delete / Remove Entry ${h.ticker}`}
+                      >
+                        <Trash2 className="size-3" />
+                        Delete / Remove Entry
                       </button>
                     </>
                   )}
@@ -664,7 +730,7 @@ export function PortfolioPage() {
             <form
               onSubmit={submitAdd}
               className="grid items-center gap-2 border-t border-positive/20 bg-positive/[0.03] px-4 py-3"
-              style={{ gridTemplateColumns: "64px 1fr 70px 95px 95px 105px 105px 80px 64px 72px" }}
+              style={HOLDINGS_GRID_STYLE}
             >
               <input
                 type="text"
@@ -719,7 +785,7 @@ export function PortfolioPage() {
           {holdings.length > 0 && (
             <div
               className="grid items-center border-t border-border bg-surface-1 px-4 py-3 text-xs font-bold"
-              style={{ gridTemplateColumns: "64px 1fr 70px 95px 95px 105px 105px 80px 64px 72px" }}
+              style={HOLDINGS_GRID_STYLE}
             >
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Total</span>
               <span /><span /><span /><span />

@@ -13,13 +13,20 @@
 
 import { NextResponse } from "next/server";
 import { getTickerList, isDeadTicker } from "@/lib/scanner-engine";
-import { prefetchTickers, getCandleCoverage } from "@/lib/real-candles";
+import { prefetchTickers, getCandleCoverage, invalidateInsufficientCaches } from "@/lib/real-candles";
 import { writeSetting } from "@/lib/google-sheets";
 
 export async function POST(req: Request) {
   try {
-    const body        = await req.json().catch(() => ({})) as { universe?: string };
+    const body        = await req.json().catch(() => ({})) as { universe?: string; invalidateInsufficient?: boolean };
     const universeArg = (body.universe ?? "sp500").toLowerCase();
+
+    // Optional: flush in-memory entries with barCount < 200 so they re-fetch
+    // with the new FETCH_DAYS=290 value. Safe to run anytime.
+    let invalidatedCount = 0;
+    if (body.invalidateInsufficient) {
+      invalidatedCount = invalidateInsufficientCaches();
+    }
 
     // Collect tickers for the requested universe(s)
     const universes = universeArg === "all"
@@ -48,12 +55,17 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({
-      started:       true,
-      universe:      universeArg,
-      tickers:       tickers.length,
-      alreadyCached: before.real,
-      missing:       before.uncached + before.synthetic,
-      message:       `Prefetching ${tickers.length} tickers in background. Check /api/scanner?universe=${universes[0]} for coverage stats.`,
+      started:          true,
+      universe:         universeArg,
+      tickers:          tickers.length,
+      alreadyCached:    before.real,
+      missing:          before.uncached + before.synthetic,
+      invalidatedCount,
+      message: [
+        invalidatedCount > 0 ? `Cleared ${invalidatedCount} insufficient-bar cache entries.` : "",
+        `Prefetching ${tickers.length} tickers in background (FETCH_DAYS=290 → ~200 trading days).`,
+        `Check /api/scanner/diagnose for updated signal breakdown.`,
+      ].filter(Boolean).join(" "),
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

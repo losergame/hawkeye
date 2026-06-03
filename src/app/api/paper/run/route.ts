@@ -204,6 +204,7 @@ export function tradeToRow(t: PaperTrade): (string | number)[] {
       case "closedAt":              return t.closedAt;
       case "holdTimeHours":         return t.holdTimeHours ?? "";
       case "notes":                 return t.notes ? JSON.stringify(t.notes) : "";
+      case "dataQuality":           return t.dataQuality ?? "";
       default:                      return "";
     }
   });
@@ -254,6 +255,7 @@ function rowToTrade(row: string[]): PaperTrade {
     holdTimeHours:      o.holdTimeHours ? Number(o.holdTimeHours) : undefined,
     suspicious:         pct > 100 || pct < -80,
     notes:              o.notes ? (() => { try { return JSON.parse(o.notes); } catch { return undefined; } })() : undefined,
+    dataQuality:        (o.dataQuality as PaperTrade["dataQuality"]) || undefined,
   };
 }
 
@@ -572,10 +574,11 @@ export async function POST(req: Request) {
       signalsChecked:   result.signalsChecked,
       gatedSignals:     gatedSignals.length,
       syntheticBlocked,
-      positionsOpened: result.newPositions.length,
-      positionsClosed: result.closedTrades.length,
-      rejections:      result.rejections,
+      positionsOpened:  result.newPositions.length,
+      positionsClosed:  result.closedTrades.length,
+      rejections:       result.rejections,
       dupBlocksThisSession: _dupBlockLog.length,
+      badPricesRejected: result.badPrices,   // stale/wrong Finnhub quotes blocked
     },
   });
   } finally {

@@ -99,6 +99,7 @@ function rowToTrade(row: string[]): PaperTrade {
     gapType:             (o.gapType as PaperTrade["gapType"]) || "none",
     gapAmount:           Number(o.gapAmount) || 0,
     suspicious:          pct > SUSPICIOUS_GAIN || pct < SUSPICIOUS_LOSS,
+    dataQuality:         (o.dataQuality as PaperTrade["dataQuality"]) || undefined,
   };
 }
 

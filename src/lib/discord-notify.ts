@@ -9,6 +9,7 @@
  */
 
 import type { PaperPosition, PaperTrade } from "@/lib/paper-trading";
+import type { PortfolioTrade } from "@/lib/portfolio-trades";
 
 const WEBHOOK_URL = () => process.env.DISCORD_WEBHOOK_URL ?? null;
 
@@ -142,6 +143,28 @@ export async function notifyManualClose(
 }
 
 // ── Rule preset change ────────────────────────────────────────────────────────
+
+export async function notifyPortfolioClose(
+  trade: PortfolioTrade,
+): Promise<void> {
+  await post({
+    embeds: [{
+      color: trade.result === "win" ? 0x00d084 : trade.result === "loss" ? 0xff3b5c : 0xf59e0b,
+      title: "PORTFOLIO POSITION CLOSED",
+      fields: [
+        { name: "Ticker", value: `**${trade.ticker}**`, inline: true },
+        { name: "Result", value: trade.result.toUpperCase(), inline: true },
+        { name: "Entry", value: money(trade.entryPrice), inline: true },
+        { name: "Exit", value: money(trade.exitPrice), inline: true },
+        { name: "Shares", value: String(trade.shares), inline: true },
+        { name: "P / L", value: `${money(trade.profitLoss)} (${spct(trade.profitLossPercent)})`, inline: true },
+        { name: "Reason Closed", value: trade.reasonClosed, inline: false },
+      ],
+      footer: { text: "Hawkeye Portfolio" },
+      timestamp: new Date().toISOString(),
+    }],
+  });
+}
 
 export async function notifyPresetDisabled(presetName: string): Promise<void> {
   await post({

@@ -8,6 +8,7 @@
  */
 
 import { google, type sheets_v4 } from "googleapis";
+import { PORTFOLIO_TRADE_HEADERS } from "@/lib/portfolio-trades";
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -73,6 +74,7 @@ export const SHEETS = {
   SIGNALS:          "Signals",
   PERFORMANCE:      "SignalPerformance",
   PORTFOLIO:        "Portfolio",
+  PORTFOLIO_TRADES: "PortfolioTrades",
   WATCHLIST:        "Watchlist",
   HISTORY:          "ScannerHistory",
   TOP_PICKS:        "DailyTopPicks",
@@ -104,6 +106,7 @@ export const HEADERS: Record<string, string[]> = {
     "currentPrice","marketValue","gainLossDollar","gainLossPercent",
     "allocationPercent","sector","updatedAt",
   ],
+  [SHEETS.PORTFOLIO_TRADES]: [...PORTFOLIO_TRADE_HEADERS],
   [SHEETS.WATCHLIST]: ["id","ticker","companyName","sector","addedAt","updatedAt"],
   [SHEETS.HISTORY]: [
     "scanId","universe","totalScanned","setupsFound",
@@ -140,6 +143,8 @@ export const HEADERS: Record<string, string[]> = {
     "holdTimeHours","notes",
     // realism upgrade columns appended at end to avoid misaligning existing rows
     "effectiveEntryPrice","effectiveExitPrice","slippageCost","gapType","gapAmount",
+    // data quality flag — "DATA_ERROR" excludes trade from analytics
+    "dataQuality",
   ],
   [SHEETS.PAPER_EQUITY]: [
     "date","accountValue","cashBalance","investedValue","dailyPnL","totalPnLPercent",
