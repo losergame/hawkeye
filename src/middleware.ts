@@ -63,7 +63,8 @@ export async function middleware(req: NextRequest) {
     pathname === "/api/scanner/prefetch" ||
     pathname === "/api/scanner/diagnose" ||
     pathname === "/api/scanner/cache-stats" ||
-    pathname === "/api/paper/trades/mark-error";
+    pathname === "/api/paper/trades/mark-error" ||
+    pathname === "/api/paper/rebuild";
 
   if (isAdminPath) {
     const cronSecret = process.env.CRON_SECRET;

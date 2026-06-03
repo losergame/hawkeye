@@ -5,6 +5,43 @@
 
 ---
 
+## 2026-06-03 — Pullback Buy Tightening + Account Reset from June 2nd
+
+### Context
+Pullback Buy win rate was 33% vs 100% for Momentum Breakout and Trend Continuation.
+Pre-fix trades (bad prices, old thresholds) were skewing equity curve negatively.
+
+### Change 1 — Pullback Buy elevated confidence gate (paper-trading.ts)
+- New constant: `PULLBACK_BUY_MIN_CONFIDENCE = 80` (vs `MIN_CONFIDENCE = 70` for others)
+- New constant: `PULLBACK_BUY_SIZE_MULTIPLIER = 0.5`
+- In `runCycle()` pre-filter: Pullback Buy now requires ≥80% confidence (extra check after global gate)
+- Rejection reason: `"Pullback Buy: 74% < 80% (elevated gate)"`
+
+### Change 2 — Pullback Buy half position size (paper-trading.ts)
+- `calculatePositionSize()` result for Pullback Buy is multiplied by 0.5, floored at 1 share
+- All other setup types unchanged
+- Reduces capital at risk while still collecting live win-rate data
+
+### Change 3 — Rebuild endpoint accepts date cutoff (rebuild/route.ts)
+- `POST /api/paper/rebuild` now accepts `{ startDate?, startingBalance? }` body
+- When `startDate` supplied: only trades with `closedAt >= startDate` count toward P/L
+- Pre-cutoff trades remain in Sheets for historical reference
+- Also excludes DATA_ERROR trades from calculations (already done for suspicious)
+- New response fields: `excludedByDate`, `startDate`
+
+### Middleware update
+- `/api/paper/rebuild` added to admin CRON_SECRET bypass
+
+### Rebuild executed
+- `POST /api/paper/rebuild { "startDate": "2026-06-02", "startingBalance": 1000 }`
+- Result: excluded 8 pre-June-2 trades, removed 2 suspicious/error (GRMN/ILMN)
+- **New account**: $1,073.99 (+7.4%), 8 trades, 6W/2L (75% win rate), 3 open positions
+- NTST (Pullback Buy, half-size), F (Trend Continuation), COHU (Momentum Breakout)
+
+### Build: ✓ Compiled successfully, zero TS errors
+
+---
+
 ## 2026-06-02 (Session 7) — DATA_ERROR Flag for Corrupted Trades
 
 ### Changes

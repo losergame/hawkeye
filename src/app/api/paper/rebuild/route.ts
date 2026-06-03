@@ -103,10 +103,21 @@ function rowToTrade(row: string[]): PaperTrade {
   };
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   if (!isSheetsConfigured()) {
     return NextResponse.json({ error: "Google Sheets not configured" }, { status: 503 });
   }
+
+  // Optional: startDate (ISO date string, e.g. "2026-06-02") and startingBalance.
+  // When startDate is supplied, only trades closed on or after that date contribute
+  // to P/L — pre-date trades stay in the sheet for historical reference but are
+  // excluded from the account balance calculation.
+  const body = await req.json().catch(() => ({})) as {
+    startDate?:       string;   // e.g. "2026-06-02" — exclude older closed trades
+    startingBalance?: number;   // override starting balance (default: existing or 1000)
+  };
+  const cutoffDate     = body.startDate ? new Date(body.startDate) : null;
+  const forceBalance   = typeof body.startingBalance === "number" ? body.startingBalance : null;
 
   try {
     // ── 1. Load all current data ────────────────────────────────────────────
@@ -134,26 +145,39 @@ export async function POST() {
     const openPositions    = [...seenPosTickers.values()];
     const dupPositionCount = rawPositions.length - openPositions.length;
 
-    const allTrades    = tradeRows.slice(1).filter((r) => r[0]).map(rowToTrade);
-    const validTrades  = allTrades.filter((t) => !t.suspicious);
-    const removedCount = allTrades.length - validTrades.length;
+    const allTrades = tradeRows.slice(1).filter((r) => r[0]).map(rowToTrade);
+
+    // Remove suspicious trades and DATA_ERROR trades from all calculations
+    const cleanTrades = allTrades.filter(
+      (t) => !t.suspicious && t.dataQuality !== "DATA_ERROR" && t.result !== "DATA_ERROR",
+    );
+
+    // When startDate is supplied, only trades closed on or after that date count
+    // toward P/L — older trades stay in the sheet but don't affect the balance.
+    const validTrades = cutoffDate
+      ? cleanTrades.filter((t) => t.closedAt && new Date(t.closedAt) >= cutoffDate)
+      : cleanTrades;
+
+    const excludedByDate = cleanTrades.length - validTrades.length;
+    const removedCount   = allTrades.length - cleanTrades.length;
 
     // ── 2. Recalculate account from first principles ────────────────────────
     //
     // Formula:
-    //   realizedPnL       = sum(PaperTrades.profitLoss)
+    //   realizedPnL       = sum(PaperTrades.profitLoss for trades in window)
     //   unrealizedPnL     = sum(PaperPositions.unrealizedPnL)
     //   equityValue       = sum(PaperPositions.positionValue)
     //   totalPnL          = realizedPnL + unrealizedPnL
     //   totalAccountValue = startingBalance + totalPnL
 
-    const startingBalance = existingAccount.startingBalance || 1000;
+    // Use forced balance when rebuilding from a date cutoff, or existing balance
+    const startingBalance = forceBalance ?? existingAccount.startingBalance ?? 1000;
     const investedCost    = openPositions.reduce((s, p) => s + p.entryPrice * p.shares, 0);
     const realizedPnL     = validTrades.reduce((s, t) => s + t.profitLoss, 0);
     const cashBalance     = startingBalance - investedCost + realizedPnL;
 
-    const wins    = validTrades.filter((t) => t.result === "win").length;
-    const losses  = validTrades.filter((t) => t.result === "loss").length;
+    const wins   = validTrades.filter((t) => t.result === "win").length;
+    const losses = validTrades.filter((t) => t.result === "loss").length;
     const total   = wins + losses;
     const winRate = total > 0 ? wins / total : 0;
 
@@ -201,9 +225,11 @@ export async function POST() {
     })();
 
     const parts: string[] = [];
-    if (removedCount > 0)    parts.push(`Removed ${removedCount} suspicious trade(s).`);
+    if (removedCount > 0)     parts.push(`Removed ${removedCount} suspicious/error trade(s).`);
     if (dupPositionCount > 0) parts.push(`Removed ${dupPositionCount} duplicate open position(s).`);
+    if (excludedByDate > 0)   parts.push(`Excluded ${excludedByDate} pre-${body.startDate} trade(s) from P/L.`);
     parts.push(`Account rebuilt from ${openPositions.length} open position(s) and ${validTrades.length} closed trade(s).`);
+    if (cutoffDate) parts.push(`Starting balance reset to $${startingBalance.toFixed(2)}.`);
 
     return NextResponse.json({
       ok:                true,
@@ -211,7 +237,9 @@ export async function POST() {
       openPositions:     rebuiltPositions,
       validTrades:       validTrades.length,
       removedTrades:     removedCount,
+      excludedByDate,
       dupPositionCount,
+      startDate:         body.startDate ?? null,
       message:           parts.join(" "),
     });
   } catch (err) {

@@ -138,6 +138,14 @@ const MIN_SCORE        = 75;
 const MIN_CONFIDENCE   = 70;
 const MIN_RR           = 2.0;
 
+// ── Pullback Buy selective filters ────────────────────────────────────────────
+// Pullback Buy has a lower historical win rate than Momentum Breakout and Trend
+// Continuation. Until it proves itself on live data, it runs under tighter rules:
+//   1. Higher confidence gate  — 80% vs 70% for other setups
+//   2. Half position size      — reduces risk while still collecting data points
+const PULLBACK_BUY_MIN_CONFIDENCE = 80;    // vs MIN_CONFIDENCE = 70
+const PULLBACK_BUY_SIZE_MULTIPLIER = 0.5;  // 50% of normal position size
+
 // ── Realism constants ─────────────────────────────────────────────────────────
 
 /** Slippage applied to buy fills (price paid = entry × (1 + BUY_SLIPPAGE)). */
@@ -621,6 +629,12 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
           detail: `${s.confidenceScore}% < ${effectiveMinConf}%` });
         continue;
       }
+      // Pullback Buy has a higher confidence requirement until it proves itself
+      if (s.setupType === "Pullback Buy" && s.confidenceScore < PULLBACK_BUY_MIN_CONFIDENCE) {
+        rejections.push({ ticker: s.ticker, reason: "confidence_too_low",
+          detail: `Pullback Buy: ${s.confidenceScore}% < ${PULLBACK_BUY_MIN_CONFIDENCE}% (elevated gate)` });
+        continue;
+      }
       if (!Number.isFinite(s.riskReward) || s.riskReward < effectiveMinRR) {
         rejections.push({ ticker: s.ticker, reason: "rr_too_low",
           detail: `${s.riskReward?.toFixed(2)} < ${effectiveMinRR}` });
@@ -710,12 +724,16 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
         continue;
       }
 
-      const shares = calculatePositionSize(
+      const rawShares = calculatePositionSize(
         account.totalAccountValue,
         setup.entryPrice,
         setup.stopLoss,
         regime,
       );
+      // Pullback Buy runs at half size until its win rate justifies full allocation
+      const shares = setup.setupType === "Pullback Buy"
+        ? Math.max(1, Math.floor(rawShares * PULLBACK_BUY_SIZE_MULTIPLIER))
+        : rawShares;
       if (shares <= 0) {
         rejections.push({ ticker: setup.ticker, reason: "shares_zero",
           detail: `entry ${setup.entryPrice} SL ${setup.stopLoss} acct ${account.totalAccountValue}` });
