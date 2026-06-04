@@ -177,7 +177,14 @@ export async function GET(req: NextRequest) {
         if (!info) continue;
         const livePrice = livePrices.get(ticker);
         const src = quality === "real" ? "real" : quality === "delayed" ? "delayed" : "mock";
-        const setups = scanTicker(info, livePrice, bars, src);
+        const setups = scanTicker(info, livePrice, bars, src).map((s) => ({
+          ...s,
+          // Tag each setup with whether a live Finnhub price was available at scan time.
+          // "live" = Finnhub returned a fresh quote → entry price is real-time.
+          // "demo" = Finnhub was rate-limited or unavailable → entry price is stale candle close.
+          // The paper trader gate uses this to block trades without a live entry price.
+          dataQuality: (livePrice ? "live" : "demo") as "live" | "demo",
+        }));
         allResults.push(...setups);
         realScanned++;
         if (quality === "real" && overallSource !== "real") overallSource = "real";

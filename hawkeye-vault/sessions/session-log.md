@@ -5,6 +5,38 @@
 
 ---
 
+## 2026-06-03 (Session 3) — dataQuality Gate Fix + VZ DATA_ERROR
+
+### Problem
+VZ trade had `candleSource: "delayed"` (passed the gate) but `dataSource: "mock"` in
+TradeNotes, meaning the entry price was a stale Polygon candle close — not a live Finnhub
+quote. The gate was checking candle quality but not price freshness.
+
+### Root Cause
+`StockSetup.dataQuality` was never set on individual setups — only on the scanner API
+response-level. So `setup.dataQuality === "live" ? "real" : "mock"` in TradeNotes always
+evaluated to "mock" (undefined !== "live").
+
+### Fix 1 — scanner/route.ts: set dataQuality per-setup
+In the real-only scan loop, after calling `scanTicker()`, each setup is now tagged:
+- `dataQuality: "live"` — Finnhub returned a fresh quote for this ticker
+- `dataQuality: "demo"` — Finnhub was rate-limited or unavailable; entry price = stale close
+
+### Fix 2 — paper/run/route.ts: add dataQuality gate
+The `filteredSignals` filter now requires BOTH:
+1. `candleSource === "real" || "delayed"` (real OHLC candle data)
+2. `dataQuality === "live"` (live Finnhub price at entry — not stale candle close)
+
+Also updated `syntheticBlocked` count to include signals rejected by the new gate.
+
+### VZ marked as DATA_ERROR
+- `POST /api/paper/trades/mark-error { "tickers": ["VZ"] }` → `updated: 1`
+- Excluded from all analytics (win rate, P/L, etc.)
+
+### Build: ✓ Compiled successfully, zero TS errors
+
+---
+
 ## 2026-06-03 (Session 2) — Realized vs Unrealized P/L Split in Paper Trader UI
 
 ### Problem

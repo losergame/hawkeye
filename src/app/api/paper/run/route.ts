@@ -435,14 +435,22 @@ export async function POST(req: Request) {
   } catch { /* default false */ }
 
   const syntheticBlocked = !allowSynthetic
-    ? signals.filter((s) => s.candleSource === "mock" || !s.candleSource).length
+    ? signals.filter((s) =>
+        s.candleSource === "mock" || !s.candleSource || s.dataQuality !== "live",
+      ).length
     : 0;
 
   const filteredSignals = allowSynthetic
     ? signals
     : signals.filter((s) =>
+        // Gate 1: real OHLC candles (not LCG-synthetic, not insufficient bars)
         (s.candleSource === "real" || s.candleSource === "delayed") &&
-        !s.insufficientData,  // also block setups with <200 bars (EMA 200 unreliable)
+        !s.insufficientData &&
+        // Gate 2: live Finnhub price at entry — blocks trades where dataSource would
+        // be "mock" (entry price is a stale candle close, not a real-time quote).
+        // VZ was gated by candleSource:"delayed" but had dataQuality:"demo" →
+        // dataSource:"mock" in trade notes — entry price was not a live market price.
+        s.dataQuality === "live",
       );
 
   const gatedSignals = tradingAllowed ? filteredSignals : [];
