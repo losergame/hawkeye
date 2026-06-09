@@ -455,6 +455,15 @@ export interface RunCycleResult {
 // Gain % threshold above which a trade is flagged as suspicious
 const SUSPICIOUS_GAIN_PCT = 100;
 
+// ── TP overshoot gate ─────────────────────────────────────────────────────────
+// Mirrors the 30% DROP gate for bad low prices. When the market price that
+// triggers a take-profit is more than 15% above TP1 in a single 30-second tick,
+// the quote is almost certainly stale/corrupt (normal favourable gaps are 0–3%).
+// The trade is closed but flagged DATA_ERROR so it is excluded from analytics.
+// Example that prompted this: HON pp_1780854690187_u7h7p — TP1 $232.75,
+// quoted market $273.65 (+17.6% above TP1), triggering a false win.
+const SUSPICIOUS_TP_OVERSHOOT_PCT = 0.15;   // >15% above TP1 = bad data
+
 export function runCycle(input: RunCycleInput): RunCycleResult {
   const { signals, prices, regime, isRunning, presetOverrides } = input;
 
@@ -532,20 +541,41 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
 
   for (const pos of openPositions) {
     const mktPrice = pos.currentPrice;
-    let closed     = false;
-    let exitPrice  = mktPrice;
-    let reason     = "";
-    let gapType:   GapType = "none";
-    let gapAmount  = 0;
+    let closed        = false;
+    let exitPrice     = mktPrice;
+    let reason        = "";
+    let gapType:      GapType = "none";
+    let gapAmount     = 0;
+    let isTPDataError = false;
 
     if (mktPrice >= pos.takeProfit1) {
+      // ── TP overshoot gate (mirrors the 30% DROP gate for bad low prices) ──
+      const tpOvershootPct = (mktPrice - pos.takeProfit1) / pos.takeProfit1;
+      if (tpOvershootPct > SUSPICIOUS_TP_OVERSHOOT_PCT) {
+        isTPDataError = true;
+        badPriceLog.push({
+          ticker:   pos.ticker,
+          badPrice: mktPrice,
+          entry:    pos.entryPrice,
+          pct:      tpOvershootPct * 100,
+          at:       new Date().toISOString(),
+        });
+        console.warn(
+          `[paper-trading] DATA_ERROR — ${pos.ticker}: ` +
+          `market $${mktPrice.toFixed(2)} is +${(tpOvershootPct * 100).toFixed(1)}% above TP1 $${pos.takeProfit1.toFixed(2)}. ` +
+          `Impossible gap in one tick — flagging as DATA_ERROR (not counted as win).`
+        );
+      }
+
       // TP limit order: fills at TP1.  Record favorable gap if mkt > TP1.
       exitPrice = pos.takeProfit1;
       if (mktPrice > pos.takeProfit1) {
         gapType   = "favorable";
         gapAmount = mktPrice - pos.takeProfit1;
       }
-      reason    = `Take profit hit — market $${mktPrice.toFixed(2)}, filled at TP1 $${pos.takeProfit1.toFixed(2)}${gapType === "favorable" ? ` (gap +$${gapAmount.toFixed(2)})` : ""}`;
+      reason = isTPDataError
+        ? `DATA_ERROR — market $${mktPrice.toFixed(2)} is +${(tpOvershootPct * 100).toFixed(1)}% above TP1 $${pos.takeProfit1.toFixed(2)} (impossible gap — bad data, not a win)`
+        : `Take profit hit — market $${mktPrice.toFixed(2)}, filled at TP1 $${pos.takeProfit1.toFixed(2)}${gapType === "favorable" ? ` (gap +$${gapAmount.toFixed(2)})` : ""}`;
       closed    = true;
     } else if (mktPrice <= pos.stopLoss) {
       // SL stop-market: fills at MARKET PRICE (gap risk — may be worse than SL).
@@ -561,9 +591,18 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
     if (closed) {
       const trade = buildClosedTrade(pos, exitPrice, reason, gapType, gapAmount);
 
+      // ── TP overshoot DATA_ERROR override ───────────────────────────────
+      if (isTPDataError) {
+        trade.result      = "DATA_ERROR";
+        trade.dataQuality = "DATA_ERROR";
+        trade.suspicious  = true;
+        trade.tp1AtEntry  = pos.takeProfit1;
+        trade.slAtEntry   = pos.stopLoss;
+      }
+
       // ── Suspicious trade detection ──────────────────────────────────────
       const gainPct = trade.profitLossPercent;
-      const suspicious = gainPct > SUSPICIOUS_GAIN_PCT || gainPct < -80;
+      const suspicious = !isTPDataError && (gainPct > SUSPICIOUS_GAIN_PCT || gainPct < -80);
       const flag = suspicious
         ? `SUSPICIOUS: ${gainPct.toFixed(1)}% gain on entry $${pos.entryPrice.toFixed(2)} — verify TP1 $${pos.takeProfit1.toFixed(2)}`
         : "";
