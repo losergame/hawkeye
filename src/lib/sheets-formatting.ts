@@ -25,6 +25,8 @@ const C = {
   NEUTRAL:     { red: 0.612, green: 0.639, blue: 0.686 }, // #9ca3af
   GREEN_BG:    { red: 0.863, green: 0.988, blue: 0.906 }, // #dcfce7
   RED_BG:      { red: 0.996, green: 0.890, blue: 0.890 }, // #fee2e2
+  ORANGE_BG:   { red: 1.000, green: 0.878, blue: 0.698 }, // #FFE0B2 — DATA_ERROR rows
+  ORANGE_TEXT: { red: 0.749, green: 0.212, blue: 0.047 }, // #BF360C deep orange
   WHITE:       { red: 1.000, green: 1.000, blue: 1.000 },
 } as const;
 
@@ -180,6 +182,10 @@ function rulesForPaperTrades(sheetId: number): sheets_v4.Schema$ConditionalForma
 
   const rules: sheets_v4.Schema$ConditionalFormatRule[] = [];
 
+  // Full-row highlight: DATA_ERROR → orange (placed first = highest priority)
+  if (result >= 0) {
+    rules.push(rowByTextEq(sheetId, result, "DATA_ERROR", C.ORANGE_BG, C.ORANGE_TEXT));
+  }
   // Full-row highlight: win → soft green row, loss → soft red row
   if (result >= 0) {
     rules.push(rowByTextEq(sheetId, result, "win",  C.GREEN_BG, C.GREEN_TEXT));
