@@ -101,6 +101,10 @@ function accountToRow(a: PaperAccount): (string | number)[] {
 
 // ── GET /api/paper/account ────────────────────────────────────────────────────
 
+const ACCOUNT_CACHE_HEADERS = {
+  "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+};
+
 export async function GET() {
   if (!isSheetsConfigured()) {
     return NextResponse.json({ account: makeDefaultAccount(), source: "default" });
@@ -121,7 +125,7 @@ export async function GET() {
     const positions = posRows.slice(1).filter((r) => r[0]).map(rowToPosition);
     const trades = tradeRows.slice(1).filter((r) => r[0]).map(rowToTrade);
     const account = rebuildAccountFromLedger(storedAccount, positions, trades);
-    return NextResponse.json({ account, source: "sheets" });
+    return NextResponse.json({ account, source: "sheets" }, { headers: ACCOUNT_CACHE_HEADERS });
   } catch (err) {
     return NextResponse.json({ account: makeDefaultAccount(), source: "fallback", error: String(err) });
   }

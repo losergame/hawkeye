@@ -58,10 +58,13 @@ export function AppNav({ subtitle, activePage, right }: AppNavProps) {
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const active = isActive(item);
+              // Hash links are same-page anchors — prefetching does nothing
+              const isHashLink = item.href.startsWith("/#");
               return (
                 <Link
                   key={item.label}
                   href={item.href}
+                  prefetch={isHashLink ? false : true}
                   className={cn(
                     "inline-flex items-center gap-1.5 px-3 py-2 transition-all duration-150",
                     active

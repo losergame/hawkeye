@@ -35,6 +35,11 @@ function pointToRow(p: EquityCurvePoint): (string | number)[] {
 
 // ── GET /api/paper/equity ─────────────────────────────────────────────────────
 
+const EQUITY_CACHE_HEADERS = {
+  // Equity curve appends ~once per run cycle — 60s cache is safe for display
+  "Cache-Control": "private, max-age=60, stale-while-revalidate=120",
+};
+
 export async function GET() {
   if (!isSheetsConfigured()) {
     return NextResponse.json({ points: [], source: "unconfigured" });
@@ -42,7 +47,7 @@ export async function GET() {
   try {
     const rows   = await getSheetRows(SHEETS.PAPER_EQUITY);
     const points = rows.slice(1).filter((r) => r[0]).map(rowToPoint);
-    return NextResponse.json({ points, source: "sheets" });
+    return NextResponse.json({ points, source: "sheets" }, { headers: EQUITY_CACHE_HEADERS });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

@@ -61,6 +61,10 @@ function tradeToRow(t: PaperTrade): (string | number)[] {
 
 // ── GET /api/paper/trades ─────────────────────────────────────────────────────
 
+const TRADES_CACHE_HEADERS = {
+  "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+};
+
 export async function GET() {
   if (!isSheetsConfigured()) {
     return NextResponse.json({ trades: [], source: "unconfigured" });
@@ -69,7 +73,7 @@ export async function GET() {
     const rows   = await getSheetRows(SHEETS.PAPER_TRADES);
     const trades = rows.slice(1).filter((r) => r[0]).map(rowToTrade)
       .sort((a, b) => b.closedAt.localeCompare(a.closedAt));
-    return NextResponse.json({ trades, source: "sheets" });
+    return NextResponse.json({ trades, source: "sheets" }, { headers: TRADES_CACHE_HEADERS });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }

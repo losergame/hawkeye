@@ -193,15 +193,19 @@ export function AnalyticsDashboard() {
   const [selected, setSelected]     = useState<PaperTrade | null>(null);
   const [realCandlePct, setRealPct] = useState(0);
 
-  const load = useCallback(async () => {
+  // force=true (Refresh button): bypass browser cache to always show latest data.
+  // force=false (auto load on mount): respect Cache-Control headers so repeat
+  // visits within 30 s are served from browser cache instantly.
+  const load = useCallback(async (force = false) => {
+    const cacheOpt = force ? { cache: "no-cache" as const } : {};
     setLoading(true);
     try {
       const [tr, pos, eq, acc, cov] = await Promise.all([
-        fetch("/api/paper/trades",    { cache: "no-store" }).then((r) => r.json()) as Promise<{ trades: PaperTrade[] }>,
-        fetch("/api/paper/positions", { cache: "no-store" }).then((r) => r.json()) as Promise<{ positions: PaperPosition[] }>,
-        fetch("/api/paper/equity",    { cache: "no-store" }).then((r) => r.json()) as Promise<{ points: EquityCurvePoint[] }>,
-        fetch("/api/paper/account",   { cache: "no-store" }).then((r) => r.json()) as Promise<{ account: PaperAccount }>,
-        fetch("/api/scanner/prefetch", { cache: "no-store" }).then((r) => r.json()).catch(() => null) as Promise<{ sp500?: { realPct: number } } | null>,
+        fetch("/api/paper/trades",     cacheOpt).then((r) => r.json()) as Promise<{ trades: PaperTrade[] }>,
+        fetch("/api/paper/positions",  cacheOpt).then((r) => r.json()) as Promise<{ positions: PaperPosition[] }>,
+        fetch("/api/paper/equity",     cacheOpt).then((r) => r.json()) as Promise<{ points: EquityCurvePoint[] }>,
+        fetch("/api/paper/account",    cacheOpt).then((r) => r.json()) as Promise<{ account: PaperAccount }>,
+        fetch("/api/scanner/prefetch", cacheOpt).then((r) => r.json()).catch(() => null) as Promise<{ sp500?: { realPct: number } } | null>,
       ]);
       setTrades(tr.trades ?? []);
       setPos(pos.positions ?? []);
@@ -379,7 +383,7 @@ export function AnalyticsDashboard() {
 
       <AppNav activePage="Analytics" subtitle="Paper trading research"
         right={
-          <button type="button" onClick={() => void load()} disabled={loading}
+          <button type="button" onClick={() => void load(true)} disabled={loading}
             className="flex items-center gap-1.5 border border-border px-3 py-1.5 text-[11px] text-muted-foreground transition hover:bg-muted hover:text-foreground">
             <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />Refresh
           </button>
