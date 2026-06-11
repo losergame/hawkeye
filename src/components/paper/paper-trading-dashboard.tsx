@@ -84,11 +84,14 @@ export function PaperTradingDashboard() {
     testMode, setTestMode,
     autoTradeEnabled, setAutoTradeEnabled,
     executeTopPick,
-    start, pause, reset, rebuild, closePosition, reload,
+    start, pause, reset, rebuild, recalculate, closePosition, reload,
   } = usePaperTrader();
 
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [startingBalance, setStartingBalance]   = useState("1000");
+  const [showResetConfirm, setShowResetConfirm]   = useState(false);
+  const [startingBalance, setStartingBalance]     = useState("1000");
+  const [clearConfirmText, setClearConfirmText]   = useState("");
+  const [showRebuildConfirm, setShowRebuildConfirm] = useState(false);
+  const [rebuildConfirmText, setRebuildConfirmText] = useState("");
   const [activeTab, setActiveTab]               = useState<"positions" | "trades" | "activity">("positions");
   const [showDebug, setShowDebug]               = useState(false);
 
@@ -97,6 +100,13 @@ export function PaperTradingDashboard() {
     if (!Number.isFinite(bal) || bal < 100) return;
     void reset(bal);
     setShowResetConfirm(false);
+    setClearConfirmText("");
+  }
+
+  function handleRebuild() {
+    void rebuild();
+    setShowRebuildConfirm(false);
+    setRebuildConfirmText("");
   }
 
   // ── P/L split: realized vs unrealized ───────────────────────────────────────
@@ -150,6 +160,16 @@ export function PaperTradingDashboard() {
               <RefreshCw className={cn("size-3.5", (isLoading || isSaving) && "animate-spin")} />
               {isSaving ? "Saving…" : "Reload"}
             </button>
+            <button
+              type="button"
+              onClick={() => void recalculate()}
+              disabled={isSaving}
+              title="Recalculate account balance from PaperTrades history — non-destructive, no data removed"
+              className="flex items-center gap-1.5 border border-border px-3 py-1.5 text-[11px] text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-50"
+            >
+              <RotateCcw className="size-3.5" />
+              Recalculate
+            </button>
             {/* Test mode toggle */}
             <button
               type="button"
@@ -166,7 +186,7 @@ export function PaperTradingDashboard() {
             </button>
             <button
               type="button"
-              onClick={() => void rebuild()}
+              onClick={() => { setRebuildConfirmText(""); setShowRebuildConfirm(true); }}
               disabled={isSaving}
               title="Strip suspicious trades, recalculate account stats, keep open positions"
               className="flex items-center gap-1.5 border border-blue-400/30 bg-blue-400/10 px-3 py-1.5 text-[11px] font-semibold text-blue-400 transition hover:bg-blue-400/20 disabled:opacity-50"
@@ -176,7 +196,7 @@ export function PaperTradingDashboard() {
             </button>
             <button
               type="button"
-              onClick={() => setShowResetConfirm(true)}
+              onClick={() => { setClearConfirmText(""); setShowResetConfirm(true); }}
               title="Full wipe — reset to $1000, clear all trades and positions"
               className="flex items-center gap-1.5 border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-[11px] font-semibold text-destructive transition hover:bg-destructive/20"
             >
@@ -278,7 +298,7 @@ export function PaperTradingDashboard() {
                 Account resets to starting balance. Sheet tabs are preserved.
                 Use <strong className="text-blue-400">Rebuild Account</strong> instead to keep open positions.
               </p>
-              <label className="mb-4 block">
+              <label className="mb-3 block">
                 <span className="text-xs text-muted-foreground">Starting balance ($)</span>
                 <input
                   type="number"
@@ -288,12 +308,64 @@ export function PaperTradingDashboard() {
                   min="100"
                 />
               </label>
+              <label className="mb-4 block">
+                <span className="text-xs text-muted-foreground">
+                  Type <strong className="text-destructive">CLEAR</strong> to confirm
+                </span>
+                <input
+                  type="text"
+                  value={clearConfirmText}
+                  onChange={(e) => setClearConfirmText(e.target.value)}
+                  placeholder="CLEAR"
+                  className="mt-1 w-full border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-foreground"
+                  autoComplete="off"
+                />
+              </label>
               <div className="flex gap-2">
                 <button type="button" onClick={handleReset}
-                  className="flex-1 border border-positive/30 bg-positive/10 py-2 text-sm font-semibold text-positive transition hover:bg-positive/20">
+                  disabled={clearConfirmText !== "CLEAR"}
+                  className="flex-1 border border-destructive/30 bg-destructive/10 py-2 text-sm font-semibold text-destructive transition hover:bg-destructive/20 disabled:opacity-40 disabled:cursor-not-allowed">
                   Clear All Data
                 </button>
-                <button type="button" onClick={() => setShowResetConfirm(false)}
+                <button type="button" onClick={() => { setShowResetConfirm(false); setClearConfirmText(""); }}
+                  className="flex-1 border border-border py-2 text-sm text-muted-foreground transition hover:bg-muted">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Rebuild confirm modal ── */}
+        {showRebuildConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="border border-border bg-card p-6 w-full max-w-sm">
+              <p className="mb-1 font-semibold text-destructive">⚠️ Rebuild Account?</p>
+              <p className="mb-4 text-sm text-muted-foreground">
+                Recalculates account stats from scratch. Suspicious and DATA_ERROR trades will be{" "}
+                <strong className="text-foreground">permanently removed</strong>. Open positions are kept.{" "}
+                Current trades will be backed up to <strong className="text-foreground">PaperTrades_Backup</strong> first.
+              </p>
+              <label className="mb-4 block">
+                <span className="text-xs text-muted-foreground">
+                  Type <strong className="text-destructive">RESET</strong> to confirm
+                </span>
+                <input
+                  type="text"
+                  value={rebuildConfirmText}
+                  onChange={(e) => setRebuildConfirmText(e.target.value)}
+                  placeholder="RESET"
+                  className="mt-1 w-full border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-foreground"
+                  autoComplete="off"
+                />
+              </label>
+              <div className="flex gap-2">
+                <button type="button" onClick={handleRebuild}
+                  disabled={rebuildConfirmText !== "RESET" || isSaving}
+                  className="flex-1 border border-destructive/30 bg-destructive/10 py-2 text-sm font-semibold text-destructive transition hover:bg-destructive/20 disabled:opacity-40 disabled:cursor-not-allowed">
+                  {isSaving ? "Rebuilding…" : "Rebuild Account"}
+                </button>
+                <button type="button" onClick={() => { setShowRebuildConfirm(false); setRebuildConfirmText(""); }}
                   className="flex-1 border border-border py-2 text-sm text-muted-foreground transition hover:bg-muted">
                   Cancel
                 </button>

@@ -14,6 +14,7 @@
 import { NextResponse } from "next/server";
 import {
   replaceAllRows, isSheetsConfigured, SHEETS,
+  backupSheetRows, getSheetRows,
   initializePaperTradingSheets, arePaperSheetsReady, resetPaperSheetsFlag,
 } from "@/lib/google-sheets";
 import { makeDefaultAccount } from "@/lib/paper-trading";
@@ -38,6 +39,10 @@ export async function POST(req: Request) {
   resetPaperSheetsFlag(); // force re-check after reset
 
   try {
+    // Backup PaperPositions before wiping — throws if backup fails (hard stop)
+    const posRows = await getSheetRows(SHEETS.PAPER_POSITIONS);
+    await backupSheetRows("PaperPositions_Backup", posRows);
+
     // Clear all paper trading data — keeps tabs + headers, removes all data rows
     await Promise.all([
       replaceAllRows(SHEETS.PAPER_ACCOUNT,   [accountToRow(freshAccount)]),

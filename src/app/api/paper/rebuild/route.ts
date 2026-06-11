@@ -17,6 +17,7 @@
 import { NextResponse } from "next/server";
 import {
   getSheetRows, replaceAllRows, isSheetsConfigured,
+  backupSheetRows,
   SHEETS, HEADERS, rowToObject,
 } from "@/lib/google-sheets";
 import {
@@ -201,7 +202,13 @@ export async function POST(req: Request) {
       winRate,
     }, rebuiltPositions, validTrades);
 
-    // ── 3. Write cleaned data back to Sheets ────────────────────────────────
+    // ── 3. Backup then write ────────────────────────────────────────────────
+    // Both backups MUST succeed before any writes — abort if either fails.
+
+    const [tradesBackup, positionsBackup] = await Promise.all([
+      backupSheetRows("PaperTrades_Backup",    tradeRows),
+      backupSheetRows("PaperPositions_Backup", posRows),
+    ]);
 
     await Promise.all([
       // Save rebuilt account (single row)
@@ -225,6 +232,7 @@ export async function POST(req: Request) {
     })();
 
     const parts: string[] = [];
+    parts.push(`Backed up: PaperTrades (${tradesBackup.rowCount} rows), PaperPositions (${positionsBackup.rowCount} rows).`);
     if (removedCount > 0)     parts.push(`Removed ${removedCount} suspicious/error trade(s).`);
     if (dupPositionCount > 0) parts.push(`Removed ${dupPositionCount} duplicate open position(s).`);
     if (excludedByDate > 0)   parts.push(`Excluded ${excludedByDate} pre-${body.startDate} trade(s) from P/L.`);
@@ -240,6 +248,7 @@ export async function POST(req: Request) {
       excludedByDate,
       dupPositionCount,
       startDate:         body.startDate ?? null,
+      backedUpAt:        tradesBackup.backedUpAt,
       message:           parts.join(" "),
     });
   } catch (err) {

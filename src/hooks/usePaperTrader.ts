@@ -73,6 +73,7 @@ interface UsePaperTraderReturn {
   pause:                () => void;
   reset:                (startingBalance?: number) => Promise<void>;
   rebuild:              () => Promise<void>;
+  recalculate:          () => Promise<void>;
   runScan:              (signals: StockSetup[], regime: MarketRegime) => Promise<void>;
   executeTopPick:       () => Promise<void>;
   closePosition:        (positionId: string) => Promise<void>;
@@ -287,6 +288,24 @@ export function usePaperTrader(): UsePaperTraderReturn {
       setIsSaving(false);
     }
   }, [reload]);
+
+  // ── Recalculate balance from trade history (non-destructive) ─────────────
+
+  const recalculate = useCallback(async () => {
+    setIsSaving(true);
+    try {
+      const data = await apiFetch<{ account: PaperAccount; message: string }>(
+        "/api/paper/account/recalculate",
+        { method: "POST" },
+      );
+      setAccount(data.account);
+      toast.success(data.message);
+    } catch (err) {
+      toast.error(`Recalculate failed: ${String(err)}`);
+    } finally {
+      setIsSaving(false);
+    }
+  }, []);
 
   // ── Run scan ──────────────────────────────────────────────────────────────
 
@@ -625,6 +644,6 @@ export function usePaperTrader(): UsePaperTraderReturn {
     market, tradingAllowed, allowOutsideHours, setAllowOutsideHours,
     testMode, setTestMode,
     autoTradeEnabled, setAutoTradeEnabled,
-    start, pause, reset, rebuild, runScan, executeTopPick, closePosition, reload,
+    start, pause, reset, rebuild, recalculate, runScan, executeTopPick, closePosition, reload,
   };
 }

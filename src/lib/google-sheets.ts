@@ -346,6 +346,45 @@ export async function ensureSheet(sheetName: string): Promise<void> {
   }
 }
 
+/**
+ * Back up a sheet tab to a dedicated backup tab (created if missing, overwritten
+ * if present).  The first row written is a timestamp.  Throws on failure so
+ * callers can treat backup failure as a hard stop rather than silently proceeding.
+ */
+export async function backupSheetRows(
+  backupTabName: string,
+  rows: string[][],
+): Promise<{ backedUpAt: string; rowCount: number }> {
+  const client = getSheetsClient();
+  const sid    = getSpreadsheetId();
+  if (!client || !sid) throw new Error("Sheets client unavailable for backup");
+
+  const backedUpAt = new Date().toISOString();
+
+  const meta   = await client.spreadsheets.get({ spreadsheetId: sid });
+  const exists = meta.data.sheets?.some((s) => s.properties?.title === backupTabName);
+  if (!exists) {
+    await client.spreadsheets.batchUpdate({
+      spreadsheetId: sid,
+      requestBody: { requests: [{ addSheet: { properties: { title: backupTabName } } }] },
+    });
+  }
+
+  const headerWidth  = rows[0]?.length ?? 0;
+  const timestampRow = [`Backed up: ${backedUpAt}`, ...Array(Math.max(headerWidth - 1, 0)).fill("")];
+  const rowsToWrite  = [timestampRow, ...rows];
+
+  await client.spreadsheets.values.clear({ spreadsheetId: sid, range: `${backupTabName}!A:Z` });
+  await client.spreadsheets.values.update({
+    spreadsheetId: sid,
+    range:              `${backupTabName}!A1`,
+    valueInputOption:   "RAW",
+    requestBody:        { values: rowsToWrite },
+  });
+
+  return { backedUpAt, rowCount: Math.max(rows.length - 1, 0) };
+}
+
 /** Read a single key from the AppSettings tab (key-value store). */
 export async function readSetting(key: string): Promise<string | null> {
   const rows = await getSheetRows(SHEETS.SETTINGS);
