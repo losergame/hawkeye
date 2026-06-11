@@ -386,6 +386,9 @@ export const TICKER_COOLDOWN_MINUTES = 30;
 /** @deprecated use TICKER_COOLDOWN_MINUTES */
 export const TICKER_COOLDOWN_HOURS   = TICKER_COOLDOWN_MINUTES / 60;
 
+/** Tickers that closed as DATA_ERROR are blocked from re-entry for this long. */
+export const DATA_ERROR_COOLDOWN_HOURS = 24;
+
 export interface PresetOverrides {
   minScannerScore?:   number;
   minConfidence?:     number;
@@ -423,7 +426,9 @@ export type RejectionReason =
   | "price_too_low"               // below MIN_PRICE_FOR_PAPER_TRADE
   | "low_liquidity"               // below MIN_DAILY_VOLUME
   | "zero_quote"                  // Finnhub returned price = 0
-  | "setup_type_concentration";   // max 40% same setup type in open positions
+  | "setup_type_concentration"    // max 40% same setup type in open positions
+  | "delayed_candles"             // candleSource === "delayed" at signal time — data not fresh enough
+  | "data_error_cooldown";        // ticker closed as DATA_ERROR within last 24 h
 
 export interface SignalRejection {
   ticker:  string;
@@ -655,6 +660,16 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
         .map((t) => t.ticker),
     );
 
+    // DATA_ERROR cooldown: tickers that closed as DATA_ERROR within the last 24 h
+    // are blocked from re-entry. Uses the full closedTrades history (not just
+    // the 60-min recentTrades window) so the 24-h window is always respected.
+    const dataErrorCutoffMs = Date.now() - DATA_ERROR_COOLDOWN_HOURS * 3_600_000;
+    const dataErrorCooledDown = new Set(
+      (input.closedTrades ?? [])
+        .filter((t) => t.result === "DATA_ERROR" && new Date(t.closedAt).getTime() > dataErrorCutoffMs)
+        .map((t) => t.ticker),
+    );
+
     // Pre-filter with rejection tracking
     const qualifying: StockSetup[] = [];
     for (const s of signals) {
@@ -702,6 +717,13 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
       if (s.dataQuality === "live" && s.currentPrice === 0) {
         rejections.push({ ticker: s.ticker, reason: "zero_quote",
           detail: "Finnhub returned price = 0 — likely delisted or halted" });
+        continue;
+      }
+      // Delayed candle guard: setup was built from non-real-time candles —
+      // levels (entry/SL/TP) may not reflect current price action.
+      if (s.candleSource === "delayed") {
+        rejections.push({ ticker: s.ticker, reason: "delayed_candles",
+          detail: "skipped — delayed candle data" });
         continue;
       }
 
@@ -760,6 +782,11 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
       if (cooledDown.has(setup.ticker)) {
         rejections.push({ ticker: setup.ticker, reason: "cooldown",
           detail: `stopped out within last ${TICKER_COOLDOWN_HOURS}h — cooldown active` });
+        continue;
+      }
+      if (dataErrorCooledDown.has(setup.ticker)) {
+        rejections.push({ ticker: setup.ticker, reason: "data_error_cooldown",
+          detail: `skipped — DATA_ERROR cooldown (${DATA_ERROR_COOLDOWN_HOURS}h block after bad data close)` });
         continue;
       }
 
