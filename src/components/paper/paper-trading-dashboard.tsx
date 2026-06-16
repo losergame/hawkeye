@@ -726,6 +726,7 @@ export function PaperTradingDashboard() {
                         {debug.recentRejections.slice(0, 20).map((r, i) => (
                           <div key={i} className="flex items-start gap-2 border border-border bg-card px-3 py-2 text-[11px]">
                             <span className="font-bold text-destructive w-16 shrink-0">{r.ticker}</span>
+                            {r.setupType && <span className="text-blue-400 font-medium w-32 shrink-0 truncate">{r.setupType}</span>}
                             <span className="text-amber-400 font-medium w-36 shrink-0">{r.reason.replace(/_/g, " ")}</span>
                             {r.detail && <span className="text-muted-foreground truncate">{r.detail}</span>}
                           </div>

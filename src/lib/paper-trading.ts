@@ -431,9 +431,10 @@ export type RejectionReason =
   | "data_error_cooldown";        // ticker closed as DATA_ERROR within last 24 h
 
 export interface SignalRejection {
-  ticker:  string;
-  reason:  RejectionReason;
-  detail?: string;
+  ticker:     string;
+  setupType?: string;
+  reason:     RejectionReason;
+  detail?:    string;
 }
 
 export interface BadPriceEntry {
@@ -681,61 +682,61 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
     const qualifying: StockSetup[] = [];
     for (const s of signals) {
       if (s.entryPrice <= s.stopLoss || s.takeProfit1 <= s.entryPrice) {
-        rejections.push({ ticker: s.ticker, reason: "invalid_setup",
+        rejections.push({ ticker: s.ticker, setupType: s.setupType, reason: "invalid_setup",
           detail: `entry ${s.entryPrice} SL ${s.stopLoss} TP1 ${s.takeProfit1}` });
         continue;
       }
       if (s.confidenceScore < effectiveMinConf) {
-        rejections.push({ ticker: s.ticker, reason: "confidence_too_low",
+        rejections.push({ ticker: s.ticker, setupType: s.setupType, reason: "confidence_too_low",
           detail: `${s.confidenceScore}% < ${effectiveMinConf}%` });
         continue;
       }
       // Pullback Buy has a higher confidence requirement until it proves itself
       if (s.setupType === "Pullback Buy" && s.confidenceScore < PULLBACK_BUY_MIN_CONFIDENCE) {
-        rejections.push({ ticker: s.ticker, reason: "confidence_too_low",
+        rejections.push({ ticker: s.ticker, setupType: s.setupType, reason: "confidence_too_low",
           detail: `Pullback Buy: ${s.confidenceScore}% < ${PULLBACK_BUY_MIN_CONFIDENCE}% (elevated gate)` });
         continue;
       }
       if (!Number.isFinite(s.riskReward) || s.riskReward < effectiveMinRR) {
-        rejections.push({ ticker: s.ticker, reason: "rr_too_low",
+        rejections.push({ ticker: s.ticker, setupType: s.setupType, reason: "rr_too_low",
           detail: `${s.riskReward?.toFixed(2)} < ${effectiveMinRR}` });
         continue;
       }
       if (s.scannerScore !== undefined && s.scannerScore < effectiveMinScore) {
-        rejections.push({ ticker: s.ticker, reason: "score_too_low",
+        rejections.push({ ticker: s.ticker, setupType: s.setupType, reason: "score_too_low",
           detail: `${s.scannerScore} < ${effectiveMinScore}` });
         continue;
       }
       // ── Realism filters ───────────────────────────────────────────────────
       // Price filter: reject sub-$5 stocks (hard to trade realistically)
       if (s.currentPrice < MIN_PRICE_FOR_PAPER_TRADE) {
-        rejections.push({ ticker: s.ticker, reason: "price_too_low",
+        rejections.push({ ticker: s.ticker, setupType: s.setupType, reason: "price_too_low",
           detail: `$${s.currentPrice.toFixed(2)} < $${MIN_PRICE_FOR_PAPER_TRADE} minimum` });
         continue;
       }
       // Volume/liquidity filter: reject illiquid stocks
       const adv = s.indicators.avgVolume ?? 0;
       if (adv < MIN_DAILY_VOLUME) {
-        rejections.push({ ticker: s.ticker, reason: "low_liquidity",
+        rejections.push({ ticker: s.ticker, setupType: s.setupType, reason: "low_liquidity",
           detail: `ADV ${adv.toLocaleString()} < ${MIN_DAILY_VOLUME.toLocaleString()} minimum` });
         continue;
       }
       // Zero-quote guard: if scanner has a live price of 0, skip
       if (s.dataQuality === "live" && s.currentPrice === 0) {
-        rejections.push({ ticker: s.ticker, reason: "zero_quote",
+        rejections.push({ ticker: s.ticker, setupType: s.setupType, reason: "zero_quote",
           detail: "Finnhub returned price = 0 — likely delisted or halted" });
         continue;
       }
       // Delayed candle guard: setup was built from non-real-time candles —
       // levels (entry/SL/TP) may not reflect current price action.
       if (s.candleSource === "delayed") {
-        rejections.push({ ticker: s.ticker, reason: "delayed_candles",
+        rejections.push({ ticker: s.ticker, setupType: s.setupType, reason: "delayed_candles",
           detail: "skipped — delayed candle data" });
         continue;
       }
 
       if (allowedSetups.length > 0 && !allowedSetups.includes(s.setupType)) {
-        rejections.push({ ticker: s.ticker, reason: "regime_defensive",
+        rejections.push({ ticker: s.ticker, setupType: s.setupType, reason: "regime_defensive",
           detail: `${s.setupType} not in allowed setups: [${allowedSetups.join(", ")}]` });
         continue;
       }
@@ -747,13 +748,13 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
           // to go against a soft tape. Weaker signals are blocked.
           const score = s.scannerScore ?? 0;
           if (score < 75) {
-            rejections.push({ ticker: s.ticker, reason: "regime_defensive",
+            rejections.push({ ticker: s.ticker, setupType: s.setupType, reason: "regime_defensive",
               detail: `${s.setupType} blocked in defensive (score ${score} < 75 minimum)` });
             continue;
           }
         }
         if (s.setupType === "Pullback Buy") {
-          rejections.push({ ticker: s.ticker, reason: "regime_defensive",
+          rejections.push({ ticker: s.ticker, setupType: s.setupType, reason: "regime_defensive",
             detail: "Pullback Buy disabled in defensive regime — stocks pulling back may continue falling" });
           continue;
         }
@@ -770,29 +771,29 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
 
     for (const setup of qualifying) {
       if (openPositions.length >= MAX_POSITIONS) {
-        rejections.push({ ticker: setup.ticker, reason: "position_limit",
+        rejections.push({ ticker: setup.ticker, setupType: setup.setupType, reason: "position_limit",
           detail: `${openPositions.length}/${MAX_POSITIONS} slots used` });
         continue;
       }
       if (heldTickers.has(setup.ticker)) {
-        rejections.push({ ticker: setup.ticker, reason: "duplicate_ticker" });
+        rejections.push({ ticker: setup.ticker, setupType: setup.setupType, reason: "duplicate_ticker" });
         continue;
       }
       // Setup-type diversification: max 40% of open positions can be the same type.
       // With MAX_POSITIONS = 3, this allows at most 1 position per type (40% of 3 = 1.2 → floor = 1).
       const maxSameType = Math.max(1, Math.floor(MAX_POSITIONS * 0.4));
       if ((openSetupTypeCounts[setup.setupType] ?? 0) >= maxSameType) {
-        rejections.push({ ticker: setup.ticker, reason: "setup_type_concentration",
+        rejections.push({ ticker: setup.ticker, setupType: setup.setupType, reason: "setup_type_concentration",
           detail: `Already have ${openSetupTypeCounts[setup.setupType]} ${setup.setupType} position(s) — max ${maxSameType} per type` });
         continue;
       }
       if (cooledDown.has(setup.ticker)) {
-        rejections.push({ ticker: setup.ticker, reason: "cooldown",
+        rejections.push({ ticker: setup.ticker, setupType: setup.setupType, reason: "cooldown",
           detail: `stopped out within last ${TICKER_COOLDOWN_HOURS}h — cooldown active` });
         continue;
       }
       if (dataErrorCooledDown.has(setup.ticker)) {
-        rejections.push({ ticker: setup.ticker, reason: "data_error_cooldown",
+        rejections.push({ ticker: setup.ticker, setupType: setup.setupType, reason: "data_error_cooldown",
           detail: `skipped — DATA_ERROR cooldown (${DATA_ERROR_COOLDOWN_HOURS}h block after bad data close)` });
         continue;
       }
@@ -808,14 +809,14 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
         ? Math.max(1, Math.floor(rawShares * PULLBACK_BUY_SIZE_MULTIPLIER))
         : rawShares;
       if (shares <= 0) {
-        rejections.push({ ticker: setup.ticker, reason: "shares_zero",
+        rejections.push({ ticker: setup.ticker, setupType: setup.setupType, reason: "shares_zero",
           detail: `entry ${setup.entryPrice} SL ${setup.stopLoss} acct ${account.totalAccountValue}` });
         continue;
       }
 
       const positionValue = shares * setup.entryPrice;
       if (account.cashBalance < positionValue) {
-        rejections.push({ ticker: setup.ticker, reason: "insufficient_cash",
+        rejections.push({ ticker: setup.ticker, setupType: setup.setupType, reason: "insufficient_cash",
           detail: `need ${positionValue.toFixed(2)}, have ${account.cashBalance.toFixed(2)}` });
         continue;
       }
