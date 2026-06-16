@@ -49,6 +49,7 @@ export interface PaperDebugState {
   sheetsConfigured:         boolean;
   lastCycleDetails:         LastCycleDetail[];
   signalTypeDistribution:   Record<string, number>;
+  candleSourceBreakdown:    Record<string, number>;
 }
 
 interface UsePaperTraderReturn {
@@ -133,6 +134,7 @@ export function usePaperTrader(): UsePaperTraderReturn {
     sheetsConfigured:        false,
     lastCycleDetails:        [],
     signalTypeDistribution:  {},
+    candleSourceBreakdown:   {},
   });
 
   const { market, allowOutsideHours, setAllowOutsideHours } = useMarketHours();
@@ -347,6 +349,7 @@ export function usePaperTrader(): UsePaperTraderReturn {
           positionsClosed: number;
           rejections:            SignalRejection[];
           signalTypeDistribution: Record<string, number>;
+          candleSourceBreakdown:  Record<string, number>;
         };
       }>("/api/paper/run", {
         method: "POST",
@@ -403,6 +406,7 @@ export function usePaperTrader(): UsePaperTraderReturn {
         sheetsConfigured:       data.sheetsConfigured ?? prev.sheetsConfigured,
         lastCycleDetails:       cycleDetails,
         signalTypeDistribution: d?.signalTypeDistribution ?? prev.signalTypeDistribution,
+        candleSourceBreakdown:  d?.candleSourceBreakdown  ?? prev.candleSourceBreakdown,
       }));
 
       setAccount(data.account);

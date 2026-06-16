@@ -434,6 +434,13 @@ export async function POST(req: Request) {
     allowSynthetic = setting === "true";
   } catch { /* default false */ }
 
+  // Candle source breakdown from raw signals (before any filtering)
+  const candleSourceBreakdown = signals.reduce<Record<string, number>>((acc, s) => {
+    const src = s.candleSource ?? "unknown";
+    acc[src] = (acc[src] ?? 0) + 1;
+    return acc;
+  }, {});
+
   const syntheticBlocked = !allowSynthetic
     ? signals.filter((s) =>
         s.candleSource === "mock" || !s.candleSource || s.dataQuality !== "live",
@@ -580,8 +587,9 @@ export async function POST(req: Request) {
     debug: {
       signalsReceived:  signals.length,
       signalsChecked:   result.signalsChecked,
-      gatedSignals:     gatedSignals.length,
+      gatedSignals:         gatedSignals.length,
       syntheticBlocked,
+      candleSourceBreakdown,
       positionsOpened:  result.newPositions.length,
       positionsClosed:  result.closedTrades.length,
       rejections:            result.rejections,

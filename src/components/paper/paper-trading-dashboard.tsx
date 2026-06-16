@@ -716,6 +716,37 @@ export function PaperTradingDashboard() {
                     );
                   })()}
 
+                  {/* Candle source breakdown */}
+                  {Object.keys(debug.candleSourceBreakdown).length > 0 && (() => {
+                    const total = Object.values(debug.candleSourceBreakdown).reduce((a, b) => a + b, 0);
+                    const real    = debug.candleSourceBreakdown["real"]    ?? 0;
+                    const delayed = debug.candleSourceBreakdown["delayed"] ?? 0;
+                    const mock    = (debug.candleSourceBreakdown["mock"] ?? 0) + (debug.candleSourceBreakdown["unknown"] ?? 0);
+                    const freshPct = total > 0 ? Math.round((real / total) * 100) : 0;
+                    const ORDER: [string, number, string][] = [
+                      ["real",    real,    "text-positive"],
+                      ["delayed", delayed, "text-amber-400"],
+                      ["synthetic / unknown", mock, "text-muted-foreground"],
+                    ];
+                    return (
+                      <div className="mt-3">
+                        <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Candle freshness — {total} signals · <span className="text-positive">{freshPct}% real data</span>
+                        </p>
+                        <div className="grid gap-1 sm:grid-cols-3">
+                          {ORDER.map(([label, count, tone]) => (
+                            <div key={label} className="border border-border bg-card px-3 py-2 text-[11px]">
+                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+                              <p className={cn("mt-0.5 font-semibold tabular-nums", tone)}>
+                                {count} <span className="text-muted-foreground font-normal">({total > 0 ? Math.round((count / total) * 100) : 0}%)</span>
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Rejection reasons */}
                   {debug.recentRejections.length > 0 && (
                     <div className="mt-3">

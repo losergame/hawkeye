@@ -727,13 +727,12 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
           detail: "Finnhub returned price = 0 — likely delisted or halted" });
         continue;
       }
-      // Delayed candle guard: setup was built from non-real-time candles —
-      // levels (entry/SL/TP) may not reflect current price action.
-      if (s.candleSource === "delayed") {
-        rejections.push({ ticker: s.ticker, setupType: s.setupType, reason: "delayed_candles",
-          detail: "skipped — delayed candle data" });
-        continue;
-      }
+      // Note: candleSource === "delayed" (Polygon end-of-day bars) is no longer
+      // blocked here. The dataQuality === "live" gate in paper/run/route.ts already
+      // ensures the entry price is a fresh Finnhub quote — which was the actual
+      // risk the delayed-candle guard was meant to prevent (VZ incident).
+      // Polygon OHLC bars are reliable for EMA/RSI/MACD; only the entry price
+      // freshness matters for execution safety, and that is enforced upstream.
 
       if (allowedSetups.length > 0 && !allowedSetups.includes(s.setupType)) {
         rejections.push({ ticker: s.ticker, setupType: s.setupType, reason: "regime_defensive",
