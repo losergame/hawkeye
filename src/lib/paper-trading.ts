@@ -445,16 +445,17 @@ export interface BadPriceEntry {
 }
 
 export interface RunCycleResult {
-  account:         PaperAccount;
-  openPositions:   PaperPosition[];
-  newPositions:    PaperPosition[];
-  closedTrades:    PaperTrade[];
-  actions:         TradeAction[];
-  equityPoint:     EquityCurvePoint;
-  rejections:      SignalRejection[];
-  signalsChecked:  number;
-  auditLog:        TradeAuditEntry[];
-  badPrices:       BadPriceEntry[];   // prices rejected for being unrealistic
+  account:                  PaperAccount;
+  openPositions:            PaperPosition[];
+  newPositions:             PaperPosition[];
+  closedTrades:             PaperTrade[];
+  actions:                  TradeAction[];
+  equityPoint:              EquityCurvePoint;
+  rejections:               SignalRejection[];
+  signalsChecked:           number;
+  auditLog:                 TradeAuditEntry[];
+  badPrices:                BadPriceEntry[];   // prices rejected for being unrealistic
+  signalTypeDistribution:   Record<string, number>; // raw counts by setupType before any filtering
 }
 
 // Gain % threshold above which a trade is flagged as suspicious
@@ -471,6 +472,12 @@ const SUSPICIOUS_TP_OVERSHOOT_PCT = 0.15;   // >15% above TP1 = bad data
 
 export function runCycle(input: RunCycleInput): RunCycleResult {
   const { signals, prices, regime, isRunning, presetOverrides } = input;
+
+  // Signal type distribution before any filtering — diagnostic only
+  const signalTypeDistribution: Record<string, number> = {};
+  for (const s of signals) {
+    signalTypeDistribution[s.setupType] = (signalTypeDistribution[s.setupType] ?? 0) + 1;
+  }
 
   // Effective thresholds — preset overrides supersede hardcoded defaults
   const effectiveMinScore = presetOverrides?.minScannerScore ?? MIN_SCORE;
@@ -877,5 +884,6 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
     account, openPositions, newPositions, closedTrades, actions, equityPoint,
     rejections, signalsChecked: signals.length, auditLog,
     badPrices: badPriceLog,
+    signalTypeDistribution,
   };
 }

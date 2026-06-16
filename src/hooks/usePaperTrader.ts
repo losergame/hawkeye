@@ -44,10 +44,11 @@ export interface PaperDebugState {
   lastPositionCreated: { ticker: string; at: string } | null;
   lastDiscordAlert:    string | null;
   lastRejectionReason: string | null;
-  recentRejections:    SignalRejection[];
-  signalsChecked:      number;
-  sheetsConfigured:    boolean;
-  lastCycleDetails:    LastCycleDetail[];
+  recentRejections:         SignalRejection[];
+  signalsChecked:           number;
+  sheetsConfigured:         boolean;
+  lastCycleDetails:         LastCycleDetail[];
+  signalTypeDistribution:   Record<string, number>;
 }
 
 interface UsePaperTraderReturn {
@@ -127,10 +128,11 @@ export function usePaperTrader(): UsePaperTraderReturn {
     lastPositionCreated: null,
     lastDiscordAlert:    null,
     lastRejectionReason: null,
-    recentRejections:    [],
-    signalsChecked:      0,
-    sheetsConfigured:    false,
-    lastCycleDetails:    [],
+    recentRejections:        [],
+    signalsChecked:          0,
+    sheetsConfigured:        false,
+    lastCycleDetails:        [],
+    signalTypeDistribution:  {},
   });
 
   const { market, allowOutsideHours, setAllowOutsideHours } = useMarketHours();
@@ -343,7 +345,8 @@ export function usePaperTrader(): UsePaperTraderReturn {
           gatedSignals: number;
           positionsOpened: number;
           positionsClosed: number;
-          rejections: SignalRejection[];
+          rejections:            SignalRejection[];
+          signalTypeDistribution: Record<string, number>;
         };
       }>("/api/paper/run", {
         method: "POST",
@@ -395,10 +398,11 @@ export function usePaperTrader(): UsePaperTraderReturn {
         lastRejectionReason: d?.rejections[0]
           ? `${d.rejections[0].ticker}: ${d.rejections[0].reason}${d.rejections[0].detail ? ` (${d.rejections[0].detail})` : ""}`
           : prev.lastRejectionReason,
-        recentRejections:    d?.rejections ?? prev.recentRejections,
-        signalsChecked:      d?.signalsChecked ?? prev.signalsChecked,
-        sheetsConfigured:    data.sheetsConfigured ?? prev.sheetsConfigured,
-        lastCycleDetails:    cycleDetails,
+        recentRejections:       d?.rejections ?? prev.recentRejections,
+        signalsChecked:         d?.signalsChecked ?? prev.signalsChecked,
+        sheetsConfigured:       data.sheetsConfigured ?? prev.sheetsConfigured,
+        lastCycleDetails:       cycleDetails,
+        signalTypeDistribution: d?.signalTypeDistribution ?? prev.signalTypeDistribution,
       }));
 
       setAccount(data.account);

@@ -684,6 +684,33 @@ export function PaperTradingDashboard() {
                     ))}
                   </div>
 
+                  {/* Signal type distribution (before filtering) */}
+                  {Object.keys(debug.signalTypeDistribution).length > 0 && (() => {
+                    const total = Object.values(debug.signalTypeDistribution).reduce((a, b) => a + b, 0);
+                    const ORDER = ["Momentum Breakout", "Pullback Buy", "Trend Continuation", "Oversold Bounce"];
+                    const entries = [
+                      ...ORDER.filter((k) => debug.signalTypeDistribution[k] !== undefined).map((k) => [k, debug.signalTypeDistribution[k]] as [string, number]),
+                      ...Object.entries(debug.signalTypeDistribution).filter(([k]) => !ORDER.includes(k)),
+                    ];
+                    return (
+                      <div className="mt-3">
+                        <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Signal type distribution — {total} raw signals (before filtering)
+                        </p>
+                        <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-4">
+                          {entries.map(([type, count]) => (
+                            <div key={type} className="border border-border bg-card px-3 py-2 text-[11px]">
+                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground truncate">{type}</p>
+                              <p className="mt-0.5 font-semibold tabular-nums text-foreground">
+                                {count} <span className="text-muted-foreground font-normal">({total > 0 ? Math.round((count / total) * 100) : 0}%)</span>
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Rejection reasons */}
                   {debug.recentRejections.length > 0 && (
                     <div className="mt-3">

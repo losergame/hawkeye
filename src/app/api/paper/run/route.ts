@@ -584,8 +584,9 @@ export async function POST(req: Request) {
       syntheticBlocked,
       positionsOpened:  result.newPositions.length,
       positionsClosed:  result.closedTrades.length,
-      rejections:       result.rejections,
-      dupBlocksThisSession: _dupBlockLog.length,
+      rejections:            result.rejections,
+      signalTypeDistribution: result.signalTypeDistribution,
+      dupBlocksThisSession:  _dupBlockLog.length,
       badPricesRejected: result.badPrices,   // stale/wrong Finnhub quotes blocked
     },
   });
