@@ -36,7 +36,7 @@ Full details → `architecture/stack.md`
 
 ---
 
-## Current State (as of 2026-05-31)
+## Current State (as of 2026-06-15)
 
 - **725 tickers** across S&P 500 (503), NASDAQ 100 (100), Russell 2000 (~2000 raw, many overlap)
 - **4 setup types**: Momentum Breakout, Pullback Buy, Oversold Bounce, Trend Continuation
@@ -46,15 +46,19 @@ Full details → `architecture/stack.md`
 - **Persistence**: Google Sheets (PaperAccount, PaperPositions, PaperTrades, PaperEquityCurve)
 - **Real candle coverage**: Variable — depends on prefetch cache warmth (4-hr TTL)
 - **Allow Synthetic Data setting**: OFF by default (AppSettings in Sheets)
+- **Validation status**: Paused multiple times this week at ~15–16 clean trades (target: 30) for data quality fixes. All DATA_ERROR hardening now active; resuming collection. Update stats here once 30 clean trades are reached.
+- **DATA_ERROR count**: 4 total — VZ, HON, ON, PYPL. All marked via `/api/paper/trades/mark-error`, excluded from all analytics.
+- **Pullback Buy gate**: 80% confidence (vs 70% default) + half position size active. 2 of 4 DATA_ERRORs occurred on this setup type. Reassess at 30 clean trades.
 
 ---
 
 ## Current Priority
 
-**Real candle coverage** — eliminate synthetic LCG candles wherever possible.
-- `GET /api/scanner/prefetch` shows coverage per universe
-- `POST /api/scanner/prefetch` triggers background warm-up
-- `allowSyntheticData` AppSetting gates whether mock-candle setups are traded
+**Pullback Buy validation** — elevated confidence gate at 80% (vs default 70%) due to weak performance (3W-4L on clean trades) and 2 of 4 DATA_ERRORs occurring on this setup type. Half position size (`PULLBACK_BUY_SIZE_MULTIPLIER = 0.5`) still active. Reassess at 30 clean trades.
+
+**DATA_ERROR hardening** (completed 2026-06-15) — TP overshoot gate (15%), delayed candle entry filter, and 24h post-DATA_ERROR cooldown per ticker all live. See `bugs/known-issues.md` for details.
+
+**Validation run** — paused at ~15–16 clean trades (target: 30) pending DATA_ERROR fixes. Resuming collection with new guards active.
 
 ---
 

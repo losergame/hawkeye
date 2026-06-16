@@ -5,6 +5,99 @@
 
 ---
 
+## 2026-06-15 — DATA_ERROR Hardening, Account Safety, Signal Distribution Diagnostic, UI Fixes
+
+### Context
+30-trade clean validation run paused multiple times this week for data quality fixes. Four DATA_ERROR trades in total (VZ, HON, ON, PYPL) — corrupted price feeds triggering false wins/losses across multiple setup types. All incidents investigated and hardened before resuming collection.
+
+### 1. TP Overshoot Gate (paper-trading.ts)
+New constant `SUSPICIOUS_TP_OVERSHOOT_PCT = 0.15`. If the market price that triggers a TP exit is >15% above TP1 in a single 30-second tick, the trade closes as `DATA_ERROR` instead of `win`. Mirrors the pre-existing 30% drop gate (which catches bad lows).
+- **HON case**: TP1 $232.75, Finnhub quoted $273.65 at trigger time (+17.6% above TP1) — impossible in one 30-sec tick → now flagged DATA_ERROR.
+
+### 2. HON Retroactively Marked DATA_ERROR
+HON had already been logged as a win (+$15.80) before the TP overshoot gate existed.
+- Called `POST /api/paper/trades/mark-error { "tickers": ["HON"] }` → `updated: 1`
+- Trade now excluded from all analytics (win rate, P/L, drawdown). Total DATA_ERROR count: 2 at this point (VZ + HON).
+
+### 3. ON Semiconductor Incident
+ON closed as DATA_ERROR (bad data, price spike). Three hours later the bot re-entered ON on a new signal — outside the 60-minute `recentTrades` cooldown window, so the cooldown didn't fire. The new ON trade lost -8% with a gap through stop loss before it could be manually closed. This directly caused Fix #4.
+
+### 4. DATA_ERROR 24h Cooldown (paper-trading.ts)
+After any trade closes as `DATA_ERROR`, that ticker is now blocked from re-entry for 24 hours.
+- New constant: `DATA_ERROR_COOLDOWN_HOURS = 24`
+- New Set: `dataErrorCooledDown` in `runCycle()` — built from full `input.closedTrades` history (not the 60-min `recentTrades` window, which is what the ON re-entry exploited).
+- Rejection reason: `"data_error_cooldown"`
+
+### 5. Delayed Candle Entry Filter (paper/run/route.ts)
+If `candleSource === "delayed"` at signal time, the trade is now skipped entirely — logged as `"skipped — delayed candle data"`. Previously only `mock` was blocked; `delayed` was allowed through despite being stale.
+- Root cause of the original VZ DATA_ERROR: entered on a delayed candle, which meant entry price was a stale candle close rather than a live Finnhub quote.
+
+### 6. PYPL DATA_ERROR (Oversold Bounce setup)
+Fourth DATA_ERROR trade this week. Confirmed bad data pattern is not setup-type-specific — VZ (Trend Continuation), HON (Momentum Breakout), ON (Pullback Buy), PYPL (Oversold Bounce) all affected.
+- Called `POST /api/paper/trades/mark-error { "tickers": ["PYPL"] }` → `updated: 1`
+- Total DATA_ERROR count to date: 4 (VZ, HON, ON, PYPL)
+
+### 7. Account Wipe Incident
+"Rebuild Account" and/or "Clear Test Data" wiped PaperPositions sheet without any backup. Lost 3 open positions: EXTR, AVGO, MRVL. PaperTrades history was unaffected (separate sheet, not cleared). Account state was reconstructable from PaperTrades but open position details (entry price, stop, TP levels) were gone.
+
+### 8. backupSheetRows() + Rebuild Safety (google-sheets.ts, rebuild/route.ts)
+New `backupSheetRows(sheet, backupSheetName)` utility copies all rows to a shadow sheet before any destructive operation. Both Rebuild Account and Clear Test Data now:
+1. Backup `PaperPositions` → `PaperPositions_Backup`
+2. Backup `PaperTrades` → `PaperTrades_Backup`
+3. Abort with error if either backup fails — no wipe proceeds without a confirmed backup.
+Added a reset confirmation dialog with explicit "This will wipe your positions" warning text.
+
+### 9. Non-Destructive Recalculate (api/paper/account/recalculate, diagnostics UI)
+New `POST /api/paper/account/recalculate` route — rebuilds PaperAccount state from the existing PaperTrades + PaperPositions data without clearing or modifying either sheet. Used to restore account state after the wipe incident. Exposed as a "Recalculate" button in the diagnostics UI, clearly separated from the destructive Rebuild button.
+
+### 10. Signal Type Distribution Diagnostic (paper-trading.ts, usePaperTrader.ts, paper-trading-dashboard.tsx)
+Added signal type breakdown to Execution Debug panel showing raw counts and percentages before any filtering runs. Motivation: Pullback Buy confidence-gate rejections were dominating the rejection log, but it was unclear whether that was because (a) Pullback Buy generates a large share of raw signals or (b) the 80% elevated gate is too aggressive relative to what the scanner actually outputs.
+- `signalTypeDistribution: Record<string, number>` computed from raw `signals` at the top of `runCycle()`, before any filtering
+- Flows through `RunCycleResult` → API `debug` response → `PaperDebugState` → Execution Debug card grid
+- Shows count + percentage for each type: Momentum Breakout, Pullback Buy, Trend Continuation, Oversold Bounce
+- No trading logic changed
+
+### 11. UI Bug Fixes (theme-toggle.tsx, dashboard-shell.tsx)
+- **Hydration error** in `theme-toggle.tsx`: client/server mismatch on initial render. Fixed by deferring theme-dependent rendering until after mount.
+- **Duplicate React key** in `dashboard-shell.tsx`: sector/industry tags were not deduped before mapping, producing duplicate keys when a stock appeared in both sector and industry lists. Fixed with a Set dedup before render.
+
+### 12. Navigation Performance (layout, API routes)
+- Nav link prefetching enabled for primary routes.
+- Cache-control headers (`s-maxage`, `stale-while-revalidate`) added to read-heavy API routes.
+- Loading skeletons added for page navigation transitions to eliminate blank-flash between routes.
+
+### Pullback Buy — Elevated Gate Status
+- Clean-trade record this week: 3W-4L (on trades not marked DATA_ERROR)
+- 2 of 4 DATA_ERRORs (ON and one other) occurred on Pullback Buy setups
+- Elevated confidence gate: `PULLBACK_BUY_MIN_CONFIDENCE = 80` (vs `MIN_CONFIDENCE = 70` for other types)
+- Half position size: `PULLBACK_BUY_SIZE_MULTIPLIER = 0.5` still active
+- Will reassess both gates at 30 clean trades
+
+### Files Modified
+- `src/lib/paper-trading.ts`: `SUSPICIOUS_TP_OVERSHOOT_PCT`, `DATA_ERROR_COOLDOWN_HOURS`, `dataErrorCooledDown` Set, `signalTypeDistribution` in `RunCycleResult`
+- `src/app/api/paper/run/route.ts`: delayed candle entry filter, `signalTypeDistribution` in debug response
+- `src/app/api/paper/account/recalculate/route.ts`: new non-destructive recalculate endpoint
+- `src/lib/google-sheets.ts`: `backupSheetRows()` utility
+- `src/hooks/usePaperTrader.ts`: `signalTypeDistribution` in `PaperDebugState`, state update
+- `src/components/paper/paper-trading-dashboard.tsx`: signal type distribution card grid in Execution Debug
+- `src/components/shared/theme-toggle.tsx`: hydration fix
+- `src/components/dashboard/dashboard-shell.tsx`: sector/industry tag dedup fix
+
+### Current State After Session
+- Paper trader: ~15–16 clean trades, paused mid-validation. All DATA_ERROR hardening now active; resuming collection.
+- DATA_ERROR total: 4 trades flagged (VZ, HON, ON, PYPL) — all excluded from analytics.
+- Active guards: 30% drop gate (pre-existing), 15% TP overshoot gate, delayed candle entry filter, 24h DATA_ERROR cooldown.
+- Pullback Buy: 80% confidence gate + half position size active.
+- Build: ✓ Compiled successfully, zero TS errors
+
+### Next Session Should
+- Resume live scan cycles toward 30-trade validation target
+- Monitor Execution Debug for `data_error_cooldown` and `delayed_candles` rejections to confirm new gates are firing
+- Use signal type distribution to diagnose whether Pullback Buy is generating signals at all vs. being gated out
+- Update CLAUDE.md Current State stats once 30 clean trades reached
+
+---
+
 ## 2026-06-03 (Session 3) — dataQuality Gate Fix + VZ DATA_ERROR
 
 ### Problem

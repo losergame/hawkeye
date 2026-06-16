@@ -4,6 +4,27 @@
 
 ## RESOLVED (tracked for reference)
 
+### ~~DATA_ERROR price feed — VZ, HON, ON, PYPL false wins/losses~~ — FIXED 2026-06-15
+**Root cause**: Stale/corrupted candle data from Finnhub/Polygon triggered impossible price spikes, causing false TP hits and stop-loss triggers on VZ, HON, ON, and PYPL.
+**Fixes applied**:
+- **15% TP overshoot gate**: If market price at a TP trigger is >15% above TP1 in a single 30-sec tick, trade is closed as `DATA_ERROR` (not `win`). Mirrors the pre-existing 30% drop gate. Constant: `SUSPICIOUS_TP_OVERSHOOT_PCT = 0.15`. HON example: TP1 $232.75, quoted $273.65 (+17.6%).
+- **Delayed candle entry filter**: Signals with `candleSource === "delayed"` are now skipped entirely at entry — stale candle data is not fresh enough to trade. Previously only `mock` was blocked.
+- **24h DATA_ERROR cooldown**: After any `DATA_ERROR` close, that ticker is blocked from re-entry for 24 hours. Uses full `closedTrades` history (not just the 60-min `recentTrades` window).
+
+### ~~ON Semiconductor re-entered 3h after DATA_ERROR close~~ — FIXED 2026-06-15
+**Root cause**: Cooldown only covered `recentTrades` (60-min window). The DATA_ERROR close on ON fell outside that window, so the ticker was allowed back in. Lost -8% with a gap through stop loss.
+**Fix**: The 24h DATA_ERROR cooldown above. New constant `DATA_ERROR_COOLDOWN_HOURS = 24` reads full `input.closedTrades` history in `runCycle()`.
+
+### ~~Account wipe — Rebuild / Clear Test Data wiped PaperPositions without backup~~ — FIXED 2026-06-15
+**Root cause**: "Rebuild Account" and "Clear Test Data" both cleared PaperPositions with no prior backup. Lost 3 open positions (EXTR, AVGO, MRVL). PaperTrades history survived.
+**Fixes**:
+- **`backupSheetRows()` utility**: copies all rows to a `_Backup` shadow sheet before any destructive operation.
+- **Rebuild Account + Clear Test Data**: both now backup first and abort if backup fails.
+- **Recalculate button**: non-destructive alternative — recalculates PaperAccount from PaperTrades + PaperPositions without touching either sheet.
+- **Reset confirmation dialog**: added explicit "This will wipe positions" warning to prevent accidental clicks.
+
+---
+
 ### ~~Duplicate Open Positions (MRNA × 2, NFLX × 2)~~ — FIXED 2026-05-31
 **Root cause**: Concurrent `POST /api/paper/run` calls (30-sec price check + executeTopPick) both loaded stale 30-second cached PaperPositions, both ran runCycle with empty `heldTickers`, both called `replaceAllRows` which interleaved as clear→clear→append→append.
 **Fix**: FIFO lock, cache invalidation before load, pre-write fresh check, fingerprint dedup.
