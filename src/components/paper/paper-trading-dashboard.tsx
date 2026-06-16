@@ -638,6 +638,11 @@ export function PaperTradingDashboard() {
                         tone: market.isOpen ? "text-positive" : "text-muted-foreground",
                       },
                       {
+                        label: "Trader Running",
+                        value: isRunning ? "YES — signals processed" : "NO — signals counted but skipped",
+                        tone: isRunning ? "text-positive" : "text-destructive",
+                      },
+                      {
                         label: "Trading Allowed",
                         value: tradingAllowed
                           ? testMode ? "YES (test mode)" : "YES"
