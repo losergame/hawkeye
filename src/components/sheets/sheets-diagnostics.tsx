@@ -121,7 +121,8 @@ export function SheetsDiagnostics() {
           fetch("/api/sheets/settings?key=allowSyntheticData", { cache: "no-store" })
             .then((r) => r.json()).catch(() => ({ value: null })) as Promise<{ value: string | null }>,
         ]);
-        setCoverage(cov);
+        // Validate shape — an error response would be truthy but lack the universe keys
+        if (cov && "sp500" in cov && "nasdaq100" in cov && "russell2000" in cov) setCoverage(cov);
         setAllowSynthetic(setting.value === "true");
       } catch { /* silent */ }
     })();
@@ -131,7 +132,7 @@ export function SheetsDiagnostics() {
     setCovLoading(true);
     try {
       const cov = await fetch("/api/scanner/prefetch", { cache: "no-store" }).then((r) => r.json()) as PrefetchCoverage;
-      setCoverage(cov);
+      if (cov && "sp500" in cov) setCoverage(cov);
     } catch { /* silent */ } finally { setCovLoading(false); }
   }
 

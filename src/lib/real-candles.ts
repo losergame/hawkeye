@@ -34,7 +34,7 @@ try {
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export type CandleSource  = "finnhub" | "polygon" | "synthetic";
+export type CandleSource  = "alpaca" | "polygon" | "synthetic" | "finnhub"; // "finnhub" kept for legacy disk-cache compat
 export type CandleQuality = "real" | "delayed" | "mock";
 
 export interface CandleResult {
@@ -164,40 +164,57 @@ function cacheSet(ticker: string, result: CandleResult, ttl: number): void {
   if (result.source !== "synthetic") diskWrite(ticker, result, DISK_TTL);
 }
 
-// ── Finnhub ───────────────────────────────────────────────────────────────────
+// ── Alpaca ────────────────────────────────────────────────────────────────────
 
-interface FinnhubCandleResp {
-  c?: number[]; h?: number[]; l?: number[]; o?: number[];
-  s?: "ok" | "no_data"; t?: number[]; v?: number[];
+interface AlpacaBar {
+  t: string;
+  o: number; h: number; l: number; c: number; v: number;
 }
 
-async function fetchFinnhubCandles(
-  ticker: string, days: number, key: string,
+interface AlpacaBarsResp {
+  bars:             AlpacaBar[];
+  symbol:           string;
+  next_page_token?: string | null;
+}
+
+async function fetchAlpacaCandles(
+  ticker: string, days: number, key: string, secret: string,
 ): Promise<CandleResult | null> {
-  const to   = Math.floor(Date.now() / 1000);
-  const from = to - days * 86_400;
-  const url  = new URL("https://finnhub.io/api/v1/stock/candle");
-  url.searchParams.set("symbol", ticker); url.searchParams.set("resolution", "D");
-  url.searchParams.set("from", String(from)); url.searchParams.set("to", String(to));
-  url.searchParams.set("token", key);
+  const end   = new Date().toISOString().slice(0, 10);
+  const start = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  const url   = new URL(
+    `https://data.alpaca.markets/v2/stocks/${encodeURIComponent(ticker)}/bars`,
+  );
+  url.searchParams.set("timeframe",  "1Day");
+  url.searchParams.set("start",      start);
+  url.searchParams.set("end",        end);
+  url.searchParams.set("limit",      "1000");
+  url.searchParams.set("feed",       "iex");
+  url.searchParams.set("adjustment", "all");
+  url.searchParams.set("sort",       "asc");
 
-  const res = await fetch(url.toString(), { cache: "no-store" });
-  if (res.status === 429) throw new Error("Finnhub rate limit");
-  if (!res.ok) throw new Error(`Finnhub ${res.status}`);
+  const res = await fetch(url.toString(), {
+    cache: "no-store",
+    headers: {
+      "APCA-API-KEY-ID":     key,
+      "APCA-API-SECRET-KEY": secret,
+    },
+  });
+  if (res.status === 429) throw new Error("Alpaca rate limit");
+  if (!res.ok) throw new Error(`Alpaca ${res.status}`);
 
-  const data = (await res.json()) as FinnhubCandleResp;
-  if (data.s !== "ok" || !data.c?.length) return null;
+  const data = (await res.json()) as AlpacaBarsResp;
+  if (!data.bars?.length) return null;
 
-  const bars: OHLCBar[] = data.c.map((c, i) => ({
-    open:   data.o![i] ?? c, high: data.h![i] ?? c,
-    low:    data.l![i] ?? c, close: c, volume: data.v![i] ?? 0,
+  const bars: OHLCBar[] = data.bars.map((b) => ({
+    open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v,
   }));
 
-  return { bars, source: "finnhub", quality: "real", ticker,
+  return { bars, source: "alpaca", quality: "real", ticker,
            barCount: bars.length, sufficient: bars.length >= MIN_BARS_SUFFICIENT };
 }
 
-// ── Polygon ───────────────────────────────────────────────────────────────────
+// ── Polygon (fallback) ────────────────────────────────────────────────────────
 
 interface PolygonAgg { c?: number; h?: number; l?: number; o?: number; v?: number; }
 
@@ -227,15 +244,16 @@ async function fetchPolygonCandles(
            barCount: bars.length, sufficient: bars.length >= MIN_BARS_SUFFICIENT };
 }
 
-// ── Internal fetch ────────────────────────────────────────────────────────────
+// ── Internal fetch — priority: Alpaca → Polygon → null ───────────────────────
 
 async function fetchFromApis(ticker: string): Promise<CandleResult | null> {
-  const finnhubKey = process.env.FINNHUB_API_KEY;
-  const polygonKey = process.env.POLYGON_API_KEY;
+  const alpacaKey    = process.env.ALPACA_API_KEY;
+  const alpacaSecret = process.env.ALPACA_API_SECRET;
+  const polygonKey   = process.env.POLYGON_API_KEY;
 
-  if (finnhubKey) {
+  if (alpacaKey && alpacaSecret) {
     try {
-      const r = await fetchFinnhubCandles(ticker, FETCH_DAYS, finnhubKey);
+      const r = await fetchAlpacaCandles(ticker, FETCH_DAYS, alpacaKey, alpacaSecret);
       if (r && r.bars.length >= MIN_BARS_FETCH) return r;
     } catch { /* fall through to Polygon */ }
   }

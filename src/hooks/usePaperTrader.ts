@@ -204,13 +204,17 @@ export function usePaperTrader(): UsePaperTraderReturn {
         tickers.map(async (ticker) => {
           // force=1 bypasses the 10s server-side quote cache so held positions
           // always get a genuinely fresh price for TP/SL evaluation.
-          const d = await apiFetch<{ price: number }>(`/api/quote/${encodeURIComponent(ticker)}?force=1`);
-          return { ticker, price: d.price };
+          const d = await apiFetch<{ price: number; high?: number }>(`/api/quote/${encodeURIComponent(ticker)}?force=1`);
+          return { ticker, price: d.price, high: d.high };
         }),
       );
-      const prices: Record<string, number> = {};
+      const prices:      Record<string, number> = {};
+      const candleHighs: Record<string, number> = {};
       for (const r of entries) {
-        if (r.status === "fulfilled" && r.value.price > 0) prices[r.value.ticker] = r.value.price;
+        if (r.status === "fulfilled" && r.value.price > 0) {
+          prices[r.value.ticker] = r.value.price;
+          if (r.value.high && r.value.high > 0) candleHighs[r.value.ticker] = r.value.high;
+        }
       }
       if (Object.keys(prices).length === 0) return;
 
@@ -223,7 +227,7 @@ export function usePaperTrader(): UsePaperTraderReturn {
         }>("/api/paper/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ signals: [], prices, regime: "neutral", isRunning, allowOutsideHours }),
+          body: JSON.stringify({ signals: [], prices, candleHighs, regime: "neutral", isRunning, allowOutsideHours }),
         });
         setAccount(data.account);
         setPositions(data.openPositions);

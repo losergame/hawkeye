@@ -407,6 +407,10 @@ export interface RunCycleInput {
   closedTrades?:    PaperTrade[];
   /** Runtime overrides from active preset — supersede hardcoded MIN_* constants. */
   presetOverrides?: PresetOverrides;
+  /** Today's session high per ticker — used by the candle-high gate to catch
+   *  corrupt Finnhub quotes where both TP1 and market price are above the real
+   *  intraday range (e.g. STNG: fill $98.14, session high $82.40). */
+  candleHighs?:     Record<string, number>;
 }
 
 export type RejectionReason =
@@ -462,14 +466,21 @@ export interface RunCycleResult {
 // Gain % threshold above which a trade is flagged as suspicious
 const SUSPICIOUS_GAIN_PCT = 100;
 
-// ── TP overshoot gate ─────────────────────────────────────────────────────────
-// Mirrors the 30% DROP gate for bad low prices. When the market price that
-// triggers a take-profit is more than 15% above TP1 in a single 30-second tick,
-// the quote is almost certainly stale/corrupt (normal favourable gaps are 0–3%).
-// The trade is closed but flagged DATA_ERROR so it is excluded from analytics.
-// Example that prompted this: HON pp_1780854690187_u7h7p — TP1 $232.75,
-// quoted market $273.65 (+17.6% above TP1), triggering a false win.
-const SUSPICIOUS_TP_OVERSHOOT_PCT = 0.15;   // >15% above TP1 = bad data
+// ── TP sanity gates ───────────────────────────────────────────────────────────
+// Two complementary checks catch corrupt Finnhub quotes at TP trigger time.
+//
+// Gate 1 — TP1 overshoot: market price >15% above TP1 in one tick is impossible
+//   in normal markets (favourable gaps are 0–3%). Prompted by HON
+//   pp_1780854690187_u7h7p: TP1 $232.75, market $273.65 (+17.6%).
+//
+// Gate 2 — session-high: if the caller supplies today's candle high and the
+//   quoted market price exceeds it by >3%, the quote is corrupt regardless of
+//   how close it is to TP1. Prompted by STNG pt_1782236782671_bmpzm: TP1
+//   $90.67, market $98.14 (only +8.2% above TP1, slipping through Gate 1),
+//   but STNG's actual session high was ~$82.40 — both TP1 and market were
+//   fictitious. Gate 2 catches this class of error.
+const SUSPICIOUS_TP_OVERSHOOT_PCT = 0.15;   // Gate 1: >15% above TP1 = bad data
+const CANDLE_HIGH_TOLERANCE_PCT   = 0.03;   // Gate 2: >3% above session high = bad data
 
 export function runCycle(input: RunCycleInput): RunCycleResult {
   const { signals, prices, regime, isRunning, presetOverrides } = input;
@@ -562,10 +573,13 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
     let isTPDataError = false;
 
     if (mktPrice >= pos.takeProfit1) {
-      // ── TP overshoot gate (mirrors the 30% DROP gate for bad low prices) ──
+      let dataErrorReason = "";
+
+      // ── Gate 1: TP1 overshoot ─────────────────────────────────────────────
       const tpOvershootPct = (mktPrice - pos.takeProfit1) / pos.takeProfit1;
       if (tpOvershootPct > SUSPICIOUS_TP_OVERSHOOT_PCT) {
-        isTPDataError = true;
+        isTPDataError   = true;
+        dataErrorReason = `market $${mktPrice.toFixed(2)} is +${(tpOvershootPct * 100).toFixed(1)}% above TP1 $${pos.takeProfit1.toFixed(2)} (impossible gap)`;
         badPriceLog.push({
           ticker:   pos.ticker,
           badPrice: mktPrice,
@@ -580,6 +594,32 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
         );
       }
 
+      // ── Gate 2: session-high ──────────────────────────────────────────────
+      // If the caller provided today's candle high and the quoted price exceeds
+      // it by more than CANDLE_HIGH_TOLERANCE_PCT, the quote is corrupt — even
+      // if the TP1 overshoot alone looked plausible. Catches cases like STNG
+      // where fill was only 8.2% above TP1 but both were above the real range.
+      const sessionHigh = input.candleHighs?.[pos.ticker];
+      if (!isTPDataError && sessionHigh && sessionHigh > 0) {
+        const aboveHighPct = (mktPrice - sessionHigh) / sessionHigh;
+        if (aboveHighPct > CANDLE_HIGH_TOLERANCE_PCT) {
+          isTPDataError   = true;
+          dataErrorReason = `market $${mktPrice.toFixed(2)} is +${(aboveHighPct * 100).toFixed(1)}% above session high $${sessionHigh.toFixed(2)} (corrupt quote)`;
+          badPriceLog.push({
+            ticker:   pos.ticker,
+            badPrice: mktPrice,
+            entry:    pos.entryPrice,
+            pct:      aboveHighPct * 100,
+            at:       new Date().toISOString(),
+          });
+          console.warn(
+            `[paper-trading] DATA_ERROR — ${pos.ticker}: ` +
+            `market $${mktPrice.toFixed(2)} is +${(aboveHighPct * 100).toFixed(1)}% above session high $${sessionHigh.toFixed(2)}. ` +
+            `Corrupt Finnhub quote — flagging as DATA_ERROR (not counted as win).`
+          );
+        }
+      }
+
       // TP limit order: fills at TP1.  Record favorable gap if mkt > TP1.
       exitPrice = pos.takeProfit1;
       if (mktPrice > pos.takeProfit1) {
@@ -587,9 +627,9 @@ export function runCycle(input: RunCycleInput): RunCycleResult {
         gapAmount = mktPrice - pos.takeProfit1;
       }
       reason = isTPDataError
-        ? `DATA_ERROR — market $${mktPrice.toFixed(2)} is +${(tpOvershootPct * 100).toFixed(1)}% above TP1 $${pos.takeProfit1.toFixed(2)} (impossible gap — bad data, not a win)`
+        ? `DATA_ERROR — ${dataErrorReason} — not counted as win`
         : `Take profit hit — market $${mktPrice.toFixed(2)}, filled at TP1 $${pos.takeProfit1.toFixed(2)}${gapType === "favorable" ? ` (gap +$${gapAmount.toFixed(2)})` : ""}`;
-      closed    = true;
+      closed = true;
     } else if (mktPrice <= pos.stopLoss) {
       // SL stop-market: fills at MARKET PRICE (gap risk — may be worse than SL).
       exitPrice = mktPrice;

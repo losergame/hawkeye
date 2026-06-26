@@ -22,8 +22,9 @@ import {
 } from "@/lib/google-sheets";
 
 const HT = HEADERS[SHEETS.PAPER_TRADES];
-const RESULT_COL      = HT.indexOf("result");
-const DATA_QUALITY_COL = HT.indexOf("dataQuality");
+const RESULT_COL        = HT.indexOf("result");
+const DATA_QUALITY_COL  = HT.indexOf("dataQuality");
+const REASON_CLOSED_COL = HT.indexOf("reasonClosed");
 
 export async function POST(req: Request) {
   if (!isSheetsConfigured()) {
@@ -31,8 +32,10 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({})) as {
-    tickers?:  string[];
-    tradeIds?: string[];
+    tickers?:    string[];
+    tradeIds?:   string[];
+    /** Optional note appended to reasonClosed: "… | DATA_ERROR override: <note>" */
+    reasonNote?: string;
   };
 
   if ((!body.tickers?.length) && (!body.tradeIds?.length)) {
@@ -44,6 +47,7 @@ export async function POST(req: Request) {
 
   const tickerSet  = new Set((body.tickers ?? []).map((t) => t.toUpperCase()));
   const tradeIdSet = new Set(body.tradeIds ?? []);
+  const reasonNote = body.reasonNote?.trim() ?? "";
 
   try {
     invalidateSheetCache(SHEETS.PAPER_TRADES);
@@ -57,6 +61,11 @@ export async function POST(req: Request) {
     // Row 1 is the header. Data starts at row 2 (index 1 in the array = sheet row 2).
     const updates: Array<{ range: string; value: string }> = [];
     const marked: string[] = [];
+
+    const colLetter = (idx: number): string =>
+      idx < 26
+        ? String.fromCharCode(65 + idx)
+        : `A${String.fromCharCode(65 + idx - 26)}`; // AA, AB, …
 
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
@@ -82,16 +91,21 @@ export async function POST(req: Request) {
 
       // Update result column
       if (RESULT_COL >= 0) {
-        const col = String.fromCharCode(65 + RESULT_COL); // A=65
-        updates.push({ range: `${SHEETS.PAPER_TRADES}!${col}${sheetRow}`, value: "DATA_ERROR" });
+        updates.push({ range: `${SHEETS.PAPER_TRADES}!${colLetter(RESULT_COL)}${sheetRow}`, value: "DATA_ERROR" });
       }
 
-      // Update dataQuality column (may be beyond current data if column not yet in sheet)
+      // Update dataQuality column
       if (DATA_QUALITY_COL >= 0) {
-        const col = DATA_QUALITY_COL < 26
-          ? String.fromCharCode(65 + DATA_QUALITY_COL)
-          : `A${String.fromCharCode(65 + DATA_QUALITY_COL - 26)}`; // AA, AB, …
-        updates.push({ range: `${SHEETS.PAPER_TRADES}!${col}${sheetRow}`, value: "DATA_ERROR" });
+        updates.push({ range: `${SHEETS.PAPER_TRADES}!${colLetter(DATA_QUALITY_COL)}${sheetRow}`, value: "DATA_ERROR" });
+      }
+
+      // Append reasonNote to reasonClosed if provided
+      if (reasonNote && REASON_CLOSED_COL >= 0) {
+        const existing = (o.reasonClosed ?? "").trim();
+        const appended = existing
+          ? `${existing} | DATA_ERROR override: ${reasonNote}`
+          : `DATA_ERROR override: ${reasonNote}`;
+        updates.push({ range: `${SHEETS.PAPER_TRADES}!${colLetter(REASON_CLOSED_COL)}${sheetRow}`, value: appended });
       }
 
       marked.push(ticker);
@@ -122,11 +136,13 @@ export async function POST(req: Request) {
 
     invalidateSheetCache(SHEETS.PAPER_TRADES);
 
+    const updatesPerTrade = reasonNote ? 3 : 2; // result + dataQuality [+ reasonClosed]
+    const tradeCount = Math.floor(updates.length / updatesPerTrade);
     return NextResponse.json({
       ok:      true,
-      updated: Math.floor(updates.length / 2),   // 2 cell updates per trade
+      updated: tradeCount,
       marked: [...new Set(marked)],
-      message: `Marked ${Math.floor(updates.length / 2)} trade(s) as DATA_ERROR. ` +
+      message: `Marked ${tradeCount} trade(s) as DATA_ERROR. ` +
                `These trades are now excluded from all analytics calculations.`,
     });
   } catch (err) {

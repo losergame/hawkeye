@@ -416,9 +416,10 @@ export async function POST(req: Request) {
   }
 
   try {
-  const { signals, prices, regime, isRunning, allowOutsideHours } = (await req.json()) as {
+  const { signals, prices, candleHighs, regime, isRunning, allowOutsideHours } = (await req.json()) as {
     signals:            StockSetup[];
     prices:             Record<string, number>;
+    candleHighs?:       Record<string, number>;
     regime:             MarketRegime;
     isRunning:          boolean;
     allowOutsideHours?: boolean;
@@ -519,7 +520,7 @@ export async function POST(req: Request) {
     } catch { /* non-fatal — use defaults */ }
   }
 
-  const result = runCycle({ account, openPositions, signals: gatedSignals, prices, regime, isRunning, recentTrades, closedTrades, presetOverrides: activePresetOverrides });
+  const result = runCycle({ account, openPositions, signals: gatedSignals, prices, candleHighs, regime, isRunning, recentTrades, closedTrades, presetOverrides: activePresetOverrides });
 
   // ── Persist: always write when Sheets is configured ─────────────────────
   // Discord is only fired AFTER a confirmed successful write.

@@ -54,10 +54,56 @@ function marketStatus(): "OPEN" | "PRE-MARKET" | "AFTER-HOURS" | "CLOSED" {
 }
 
 // ── Batch live price fetch ────────────────────────────────────────────────
+//
+// Primary: Alpaca /v2/stocks/snapshots — one request per ~1000 tickers,
+//   no per-ticker rate-limit risk, covers all of SP500/NASDAQ100/Russell2000.
+//   Returns latestTrade.p (last trade price) for each symbol.
+//
+// Fallback: Finnhub individual quotes (capped at 60 to stay under rate limit).
+
+interface AlpacaSnapshotEntry {
+  latestTrade?: { p: number };
+}
 
 async function fetchLivePrices(tickers: string[]): Promise<Map<string, number>> {
-  const key = process.env.FINNHUB_API_KEY;
-  if (!key || tickers.length === 0) return new Map();
+  if (tickers.length === 0) return new Map();
+
+  const alpacaKey    = process.env.ALPACA_API_KEY;
+  const alpacaSecret = process.env.ALPACA_API_SECRET;
+
+  // ── Alpaca batch snapshots (primary) ─────────────────────────────────────
+  if (alpacaKey && alpacaSecret) {
+    const prices = new Map<string, number>();
+    // URL length cap: send ≤200 symbols per request to stay well under limits
+    const BATCH = 200;
+    for (let i = 0; i < tickers.length; i += BATCH) {
+      const chunk = tickers.slice(i, i + BATCH);
+      try {
+        const url = new URL("https://data.alpaca.markets/v2/stocks/snapshots");
+        url.searchParams.set("symbols", chunk.join(","));
+        url.searchParams.set("feed",    "iex");
+        const res = await fetch(url.toString(), {
+          next: { revalidate: 30 },
+          headers: {
+            "APCA-API-KEY-ID":     alpacaKey,
+            "APCA-API-SECRET-KEY": alpacaSecret,
+          },
+        });
+        if (!res.ok) continue;
+        const data = (await res.json()) as Record<string, AlpacaSnapshotEntry>;
+        for (const [sym, snap] of Object.entries(data)) {
+          const p = snap.latestTrade?.p;
+          if (p && p > 0) prices.set(sym.toUpperCase(), p);
+        }
+      } catch { /* continue with next batch */ }
+    }
+    if (prices.size > 0) return prices;
+    // If Alpaca returned nothing (e.g. outside market hours), fall through
+  }
+
+  // ── Finnhub individual quotes (fallback) ─────────────────────────────────
+  const finnhubKey = process.env.FINNHUB_API_KEY;
+  if (!finnhubKey) return new Map();
   const prices = new Map<string, number>();
   const BATCH = 20;
   for (let i = 0; i < tickers.length && i < 60; i += BATCH) {
@@ -65,7 +111,7 @@ async function fetchLivePrices(tickers: string[]): Promise<Map<string, number>> 
       tickers.slice(i, i + BATCH).map(async (sym) => {
         try {
           const res = await fetch(
-            `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${key}`,
+            `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${finnhubKey}`,
             { next: { revalidate: 30 } },
           );
           if (!res.ok) return;
@@ -89,7 +135,7 @@ async function fetchRealCandles(tickers: string[]): Promise<{
   const sources = new Map<string, "real" | "delayed" | "mock">();
   let overallSource: "real" | "delayed" | "mock" = "mock";
 
-  if (!process.env.FINNHUB_API_KEY && !process.env.POLYGON_API_KEY) {
+  if (!process.env.ALPACA_API_KEY && !process.env.POLYGON_API_KEY && !process.env.FINNHUB_API_KEY) {
     return { candles, sources, overallSource };
   }
 
@@ -232,7 +278,7 @@ export async function GET(req: NextRequest) {
         ];
       } else {
         // No real candles — inject live prices into synthetic results only
-        if (process.env.FINNHUB_API_KEY) {
+        if (process.env.ALPACA_API_KEY || process.env.FINNHUB_API_KEY) {
           const matched    = [...new Set(allResults.map((r) => r.ticker))].slice(0, 60);
           const livePrices = await fetchLivePrices(matched);
           if (livePrices.size > 0) {
@@ -322,7 +368,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const hasLiveQuote = !!process.env.FINNHUB_API_KEY;
+  const hasLiveQuote = !!(process.env.ALPACA_API_KEY || process.env.FINNHUB_API_KEY);
   const candleSource = cached.candleSource ?? "mock";
   const dataQuality: "live" | "hybrid" | "demo" =
     hasLiveQuote && candleSource !== "mock" ? "live"

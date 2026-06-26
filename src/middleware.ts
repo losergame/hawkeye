@@ -60,7 +60,6 @@ export async function middleware(req: NextRequest) {
   // Cron jobs + scanner maintenance ops share the same secret gate.
   const isAdminPath =
     pathname.startsWith("/api/cron/") ||
-    pathname === "/api/scanner/prefetch" ||
     pathname === "/api/scanner/diagnose" ||
     pathname === "/api/scanner/cache-stats" ||
     pathname === "/api/paper/trades/mark-error" ||

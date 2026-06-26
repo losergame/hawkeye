@@ -96,12 +96,26 @@ export async function GET(req: Request) {
     // ── 3. Load paper state from Sheets ────────────────────────────────────
     const { account, openPositions, recentTrades } = await loadPaperState();
 
+    // ── 3b. Build session highs for open positions (candle-high gate) ───────
+    // Use the most recent cached daily bar's high as a proxy for today's
+    // session high. Passed to runCycle so the candle-high gate can catch
+    // corrupt Finnhub quotes where the quoted price exceeds the real range.
+    const candleHighs: Record<string, number> = {};
+    for (const pos of openPositions) {
+      const cached = getCachedReal(pos.ticker);
+      if (cached?.bars?.length) {
+        const latestBar = cached.bars[cached.bars.length - 1];
+        if (latestBar?.high > 0) candleHighs[pos.ticker] = latestBar.high;
+      }
+    }
+
     // ── 4. Run trading cycle ────────────────────────────────────────────────
     const result = runCycle({
       account,
       openPositions,
       signals:      filteredSignals,
       prices:       {},            // no live prices in cron — scanner candle close is used
+      candleHighs,
       regime,
       isRunning:    true,
       recentTrades,
